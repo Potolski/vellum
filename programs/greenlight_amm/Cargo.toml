@@ -1,0 +1,22 @@
+[package]
+name = "greenlight-amm"
+version = "0.1.0"
+description = "Minimal CPMM proving transfer-hook tokens compose with DeFi venues"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "greenlight_amm"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+spl-token-2022 = { version = "6", features = ["no-entrypoint"] }
