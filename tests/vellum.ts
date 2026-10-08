@@ -20,7 +20,7 @@ import {
   getMintLen,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { Greenlight } from "../target/types/greenlight";
+import { Vellum } from "../target/types/vellum";
 
 // Claims bitmask (mirror of state.rs)
 const KYC = 1 << 0;
@@ -38,7 +38,7 @@ const KP = 408; // sanctioned jurisdiction for the demo blocklist
 const DECIMALS = 6;
 const UNIT = 10 ** DECIMALS;
 
-describe("greenlight", () => {
+describe("vellum", () => {
   // Pin everything to "confirmed": the transfer helper resolves the hook's
   // extra accounts off-chain at "confirmed", so writes must be visible there.
   const envProvider = anchor.AnchorProvider.env();
@@ -49,7 +49,7 @@ describe("greenlight", () => {
   );
   anchor.setProvider(provider);
   const connection = provider.connection;
-  const program = anchor.workspace.greenlight as Program<Greenlight>;
+  const program = anchor.workspace.vellum as Program<Vellum>;
   const authority = provider.wallet as anchor.Wallet; // registry authority, attestor, issuer
 
   // Actors
@@ -124,7 +124,7 @@ describe("greenlight", () => {
     });
   };
 
-  /** Assert a promise rejects with a specific Greenlight error surfaced in logs. */
+  /** Assert a promise rejects with a specific Vellum error surfaced in logs. */
   const expectHookError = async (p: Promise<unknown>, errorName: string) => {
     try {
       await p;

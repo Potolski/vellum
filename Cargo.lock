@@ -798,26 +798,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "greenlight"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "spl-tlv-account-resolution",
- "spl-token-2022",
- "spl-transfer-hook-interface",
-]
-
-[[package]]
-name = "greenlight-amm"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "spl-token-2022",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2868,6 +2848,26 @@ checksum = "0200d0fc04d809396c2ad43f3c95da3582a2556eba8d453c1087f4120ee352ff"
 dependencies = [
  "fnv",
  "lazy_static",
+]
+
+[[package]]
+name = "vellum"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "spl-tlv-account-resolution",
+ "spl-token-2022",
+ "spl-transfer-hook-interface",
+]
+
+[[package]]
+name = "vellum-amm"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "spl-token-2022",
 ]
 
 [[package]]

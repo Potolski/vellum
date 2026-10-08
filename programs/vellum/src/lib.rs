@@ -18,13 +18,13 @@ use spl_transfer_hook_interface::instruction::{ExecuteInstruction, TransferHookI
 // Glob, not named: `#[program]` resolves each context's generated
 // `__client_accounts_*` module at the crate root, so those must come along too.
 pub use confidential::*;
-use errors::GreenlightError;
+use errors::VellumError;
 use state::{claims, flags, Attestation, Policy, Registry, POLICY_REGISTRY_OFFSET, TOKEN_ACCOUNT_OWNER_OFFSET};
 
 declare_id!("7jhdAgapZXFyLW2ARyYsq2Ji5n3bG3EZSieSjMt37mdj");
 
 #[program]
-pub mod greenlight {
+pub mod vellum {
     use super::*;
 
     /// Create an attestor registry. One registry per attestor authority.
@@ -187,9 +187,9 @@ pub mod greenlight {
         );
         match ctx.accounts.mint.freeze_authority {
             COption::Some(auth) => {
-                require_keys_eq!(auth, policy_key, GreenlightError::PolicyNotFreezeAuthority)
+                require_keys_eq!(auth, policy_key, VellumError::PolicyNotFreezeAuthority)
             }
-            COption::None => return err!(GreenlightError::PolicyNotFreezeAuthority),
+            COption::None => return err!(VellumError::PolicyNotFreezeAuthority),
         }
 
         let policy = &mut ctx.accounts.policy;
@@ -207,7 +207,7 @@ pub mod greenlight {
     /// Permissionless: the outcome is a pure function of registry state.
     pub fn thaw_if_attested(ctx: Context<GateAccount>) -> Result<()> {
         let policy = &ctx.accounts.policy;
-        require!(!policy.paused, GreenlightError::TransfersPaused);
+        require!(!policy.paused, VellumError::TransfersPaused);
 
         let att = load_attestation(
             &ctx.accounts.attestation.to_account_info(),
@@ -225,7 +225,7 @@ pub mod greenlight {
     /// mint's confidential-transfer authority rather than its freeze authority.
     pub fn approve_confidential_account(ctx: Context<ApproveConfidential>) -> Result<()> {
         let policy = &ctx.accounts.policy;
-        require!(!policy.paused, GreenlightError::TransfersPaused);
+        require!(!policy.paused, VellumError::TransfersPaused);
 
         let att = load_attestation(
             &ctx.accounts.attestation.to_account_info(),
@@ -254,7 +254,7 @@ pub mod greenlight {
             Clock::get()?.unix_timestamp,
         )?;
         if !policy.paused && evaluate_holder(att.as_ref(), policy).is_ok() {
-            return err!(GreenlightError::HolderStillEligible);
+            return err!(VellumError::HolderStillEligible);
         }
         ctx.accounts.freeze()
     }
@@ -262,7 +262,7 @@ pub mod greenlight {
     /// Invoked by Token-2022 on every transfer of a hooked mint.
     pub fn transfer_hook(ctx: Context<TransferHookCtx>, _amount: u64) -> Result<()> {
         let policy = &ctx.accounts.policy;
-        require!(!policy.paused, GreenlightError::TransfersPaused);
+        require!(!policy.paused, VellumError::TransfersPaused);
 
         // Reject direct invocation outside a real transfer.
         assert_transferring(&ctx.accounts.source_token.to_account_info())?;
@@ -328,10 +328,10 @@ fn load_attestation(
     }
     let data = info.try_borrow_data()?;
     let attestation = Attestation::try_deserialize(&mut &data[..])?;
-    require_keys_eq!(attestation.registry, *expected_registry, GreenlightError::WrongRegistry);
-    require_keys_eq!(attestation.subject, *expected_subject, GreenlightError::WrongSubject);
+    require_keys_eq!(attestation.registry, *expected_registry, VellumError::WrongRegistry);
+    require_keys_eq!(attestation.subject, *expected_subject, VellumError::WrongSubject);
     if attestation.expires_at != 0 && now > attestation.expires_at {
-        msg!("greenlight: attestation for {} expired", expected_subject);
+        msg!("vellum: attestation for {} expired", expected_subject);
         return Ok(None);
     }
     Ok(Some(attestation))
@@ -350,27 +350,27 @@ fn evaluate_party(att: Option<&Attestation>, policy: &Policy, party: Party) -> R
     match party {
         Party::Sender => {
             if policy.flags & flags::REQUIRE_SENDER_KYC != 0 {
-                let a = att.ok_or(error!(GreenlightError::SenderNotAttested))?;
-                require!(a.claims & claims::KYC != 0, GreenlightError::SenderNotAttested);
+                let a = att.ok_or(error!(VellumError::SenderNotAttested))?;
+                require!(a.claims & claims::KYC != 0, VellumError::SenderNotAttested);
             }
         }
         Party::Receiver => {
             if policy.flags & flags::REQUIRE_RECEIVER_KYC != 0 {
-                let a = att.ok_or(error!(GreenlightError::ReceiverNotAttested))?;
-                require!(a.claims & claims::KYC != 0, GreenlightError::ReceiverNotAttested);
+                let a = att.ok_or(error!(VellumError::ReceiverNotAttested))?;
+                require!(a.claims & claims::KYC != 0, VellumError::ReceiverNotAttested);
             }
             if policy.flags & flags::REQUIRE_RECEIVER_ACCREDITED != 0 {
-                let a = att.ok_or(error!(GreenlightError::ReceiverNotAttested))?;
+                let a = att.ok_or(error!(VellumError::ReceiverNotAttested))?;
                 require!(
                     a.claims & claims::ACCREDITED != 0,
-                    GreenlightError::AccreditationRequired
+                    VellumError::AccreditationRequired
                 );
             }
             if let Some(a) = att {
                 if a.jurisdiction != 0
                     && policy.blocked_jurisdictions.contains(&a.jurisdiction)
                 {
-                    return err!(GreenlightError::JurisdictionBlocked);
+                    return err!(VellumError::JurisdictionBlocked);
                 }
             }
         }
@@ -395,19 +395,19 @@ fn evaluate_holder(att: Option<&Attestation>, policy: &Policy) -> Result<()> {
         }
     }
     if policy.flags & (flags::REQUIRE_SENDER_KYC | flags::REQUIRE_RECEIVER_KYC) != 0 {
-        let a = att.ok_or(error!(GreenlightError::HolderNotAttested))?;
-        require!(a.claims & claims::KYC != 0, GreenlightError::HolderNotAttested);
+        let a = att.ok_or(error!(VellumError::HolderNotAttested))?;
+        require!(a.claims & claims::KYC != 0, VellumError::HolderNotAttested);
     }
     if policy.flags & flags::REQUIRE_RECEIVER_ACCREDITED != 0 {
-        let a = att.ok_or(error!(GreenlightError::HolderNotAttested))?;
+        let a = att.ok_or(error!(VellumError::HolderNotAttested))?;
         require!(
             a.claims & claims::ACCREDITED != 0,
-            GreenlightError::AccreditationRequired
+            VellumError::AccreditationRequired
         );
     }
     if let Some(a) = att {
         if a.jurisdiction != 0 && policy.blocked_jurisdictions.contains(&a.jurisdiction) {
-            return err!(GreenlightError::JurisdictionBlocked);
+            return err!(VellumError::JurisdictionBlocked);
         }
     }
     Ok(())
@@ -420,8 +420,8 @@ fn assert_transferring(token_account: &AccountInfo) -> Result<()> {
     let state = StateWithExtensions::<SplTokenAccount>::unpack(&data)?;
     let ext = state
         .get_extension::<TransferHookAccount>()
-        .map_err(|_| error!(GreenlightError::NotTransferring))?;
-    require!(bool::from(ext.transferring), GreenlightError::NotTransferring);
+        .map_err(|_| error!(VellumError::NotTransferring))?;
+    require!(bool::from(ext.transferring), VellumError::NotTransferring);
     Ok(())
 }
 
@@ -445,7 +445,7 @@ pub struct InitRegistry<'info> {
 pub struct Attest<'info> {
     #[account(mut)]
     pub attestor: Signer<'info>,
-    #[account(constraint = registry.attestor == attestor.key() @ GreenlightError::UnauthorizedAttestor)]
+    #[account(constraint = registry.attestor == attestor.key() @ VellumError::UnauthorizedAttestor)]
     pub registry: Account<'info, Registry>,
     #[account(
         init_if_needed,
@@ -463,7 +463,7 @@ pub struct Attest<'info> {
 pub struct Revoke<'info> {
     #[account(mut)]
     pub attestor: Signer<'info>,
-    #[account(constraint = registry.attestor == attestor.key() @ GreenlightError::UnauthorizedAttestor)]
+    #[account(constraint = registry.attestor == attestor.key() @ VellumError::UnauthorizedAttestor)]
     pub registry: Account<'info, Registry>,
     #[account(
         mut,
@@ -497,7 +497,7 @@ pub struct InitPolicy<'info> {
 #[derive(Accounts)]
 pub struct UpdatePolicy<'info> {
     pub issuer: Signer<'info>,
-    #[account(mut, has_one = issuer @ GreenlightError::UnauthorizedIssuer)]
+    #[account(mut, has_one = issuer @ VellumError::UnauthorizedIssuer)]
     pub policy: Account<'info, Policy>,
 }
 

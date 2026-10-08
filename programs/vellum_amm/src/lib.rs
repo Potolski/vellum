@@ -1,11 +1,11 @@
 //! Minimal constant-product AMM for Token-2022 mints with transfer hooks.
 //!
-//! This is the "integration shim" half of Greenlight: it proves that a
+//! This is the "integration shim" half of Vellum: it proves that a
 //! permissioned (transfer-hooked) equity token composes with a DeFi venue.
 //! The entire integration cost for a venue is:
 //!   1. move tokens with `spl_token_2022::onchain::invoke_transfer_checked`
 //!      (which auto-resolves and forwards the hook's extra accounts), and
-//!   2. get the pool authority attested as a VENUE in the Greenlight registry.
+//!   2. get the pool authority attested as a VENUE in the Vellum registry.
 //! Compliance still travels through the pool: an unattested wallet's swap
 //! fails on the outbound leg inside the token program.
 
@@ -18,7 +18,7 @@ const FEE_NUMERATOR: u128 = 997; // 30 bps swap fee
 const FEE_DENOMINATOR: u128 = 1000;
 
 #[program]
-pub mod greenlight_amm {
+pub mod vellum_amm {
     use super::*;
 
     /// Create a two-sided pool. Vault token accounts (ATAs owned by the pool

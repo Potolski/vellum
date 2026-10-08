@@ -2,7 +2,7 @@
 //!
 //! Token-2022 refuses to carry `ConfidentialTransfer` and `TransferHook` on the
 //! same mint — hooks are handed the plaintext amount, which is exactly what
-//! confidential transfers encrypt. Greenlight's policy never needed the amount
+//! confidential transfers encrypt. Vellum's policy never needed the amount
 //! (it checks identity: KYC, accreditation, jurisdiction, expiry), so the
 //! enforcement point moves from the *transfer* to the *account*:
 //!
@@ -18,7 +18,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-use crate::errors::GreenlightError;
+use crate::errors::VellumError;
 use crate::state::{flags, Policy};
 
 /// Accounts for both gate cranks. Nothing here is issuer-signed: eligibility is
@@ -37,7 +37,7 @@ pub struct GateAccount<'info> {
     #[account(
         seeds = [b"policy", mint.key().as_ref()],
         bump = policy.bump,
-        constraint = policy.flags & flags::CONFIDENTIAL != 0 @ GreenlightError::NotConfidentialPolicy,
+        constraint = policy.flags & flags::CONFIDENTIAL != 0 @ VellumError::NotConfidentialPolicy,
     )]
     pub policy: Account<'info, Policy>,
 
@@ -122,7 +122,7 @@ pub struct ApproveConfidential<'info> {
     #[account(
         seeds = [b"policy", mint.key().as_ref()],
         bump = policy.bump,
-        constraint = policy.flags & flags::CONFIDENTIAL != 0 @ GreenlightError::NotConfidentialPolicy,
+        constraint = policy.flags & flags::CONFIDENTIAL != 0 @ VellumError::NotConfidentialPolicy,
     )]
     pub policy: Account<'info, Policy>,
 

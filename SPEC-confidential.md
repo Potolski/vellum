@@ -1,4 +1,4 @@
-# Greenlight Confidential — compliant *and* confidential tokenized equities
+# Vellum Confidential — compliant *and* confidential tokenized equities
 
 Addendum to `SPEC.md`. Written 2026-10-06. Submission deadline **2026-10-12 23:59 BRT**.
 
@@ -50,12 +50,12 @@ Timing, which is the whole "why now":
 
 (`SPEC.md` already lists this under honest limitations. Confirmed: `ConfidentialTransfer` is mutually exclusive with `TransferHook`, `TransferFeeConfig` and `PermanentDelegate`, because hooks are handed the plaintext amount.)
 
-Everyone reads that as a dead end. It isn't, because **Greenlight's policy never needed the amount.** It checks identity: KYC claim, accreditation, jurisdiction, expiry. The amount argument is ignored. The incompatibility is an artifact of the extension design, not of the policy.
+Everyone reads that as a dead end. It isn't, because **Vellum's policy never needed the amount.** It checks identity: KYC claim, accreditation, jurisdiction, expiry. The amount argument is ignored. The incompatibility is an artifact of the extension design, not of the policy.
 
 So: **move enforcement from the transfer to the account.**
 
 - `DefaultAccountState = Frozen` — every new token account is born unusable.
-- Freeze authority delegated to the Greenlight program.
+- Freeze authority delegated to the Vellum program.
 - A `thaw_if_attested` instruction thaws an account *only* if its owner holds a valid attestation in the policy's registry.
 - `ConfidentialTransferMint` with `auto_approve_new_accounts = false` — confidential configuration is also gated.
 
@@ -112,7 +112,7 @@ All horizontal privacy infrastructure. **None targets compliant tokenized equiti
 
 | Day | Deliverable |
 |---|---|
-| **1 — Oct 6** | `greenlight` program: `init_confidential_policy`, `thaw_if_attested`, `refreeze_if_invalid`. Reuses `Registry`/`Attestation` unchanged. Unit + localnet tests. |
+| **1 — Oct 6** | `vellum` program: `init_confidential_policy`, `thaw_if_attested`, `refreeze_if_invalid`. Reuses `Registry`/`Attestation` unchanged. Unit + localnet tests. |
 | **2 — Oct 7** | TS: create the confidential mint (`DefaultAccountState=Frozen` + `ConfidentialTransferMint{auto_approve=false, auditor}`); configure account; deposit → apply → confidential transfer between two thawed accounts. Prove encrypted transfer end to end. |
 | **3 — Oct 8** | The demo. Side-by-side: public mint balance readable by anyone vs confidential mint showing ciphertext; unattested wallet cannot open an account; auditor key reveals the true number. |
 | **4 — Oct 9** | `auditor-report` script (regulatory export: decrypt the full holder register). README + architecture diagram. Visible commit velocity. |

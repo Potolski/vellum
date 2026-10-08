@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum GreenlightError {
+pub enum VellumError {
     #[msg("Transfers of this token are paused by the issuer")]
     TransfersPaused,
     #[msg("Sender wallet has no valid attestation for this token's registry")]

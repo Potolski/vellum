@@ -21,8 +21,8 @@ import {
   getMintLen,
 } from "@solana/spl-token";
 import { assert } from "chai";
-import { Greenlight } from "../target/types/greenlight";
-import { GreenlightAmm } from "../target/types/greenlight_amm";
+import { Vellum } from "../target/types/vellum";
+import { VellumAmm } from "../target/types/vellum_amm";
 
 const KYC = 1 << 0;
 const VENUE = 1 << 2;
@@ -35,7 +35,7 @@ const NO_BLOCKED = new Array(8).fill(0);
 const DECIMALS = 6;
 const UNIT = 10 ** DECIMALS;
 
-describe("greenlight_amm (composability shim)", () => {
+describe("vellum_amm (composability shim)", () => {
   const envProvider = anchor.AnchorProvider.env();
   const provider = new anchor.AnchorProvider(
     new anchor.web3.Connection(envProvider.connection.rpcEndpoint, "confirmed"),
@@ -44,8 +44,8 @@ describe("greenlight_amm (composability shim)", () => {
   );
   anchor.setProvider(provider);
   const connection = provider.connection;
-  const gl = anchor.workspace.greenlight as Program<Greenlight>;
-  const amm = anchor.workspace.greenlightAmm as Program<GreenlightAmm>;
+  const gl = anchor.workspace.vellum as Program<Vellum>;
+  const amm = anchor.workspace.vellumAmm as Program<VellumAmm>;
   const payer = provider.wallet as anchor.Wallet;
 
   // Separate registry namespace from the core test file (fresh authority).

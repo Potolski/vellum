@@ -1,12 +1,12 @@
 [package]
-name = "greenlight"
+name = "vellum"
 version = "0.1.0"
 description = "Composable compliance layer for tokenized equities on Solana"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "greenlight"
+name = "vellum"
 
 [features]
 default = []

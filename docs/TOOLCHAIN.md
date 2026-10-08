@@ -83,4 +83,4 @@ Approved: true
 ```
 
 Note it uses `--enable-confidential-transfers auto` to isolate the crypto. The
-product uses `manual`, where approval is gated by `greenlight::approve_confidential_account`.
+product uses `manual`, where approval is gated by `vellum::approve_confidential_account`.

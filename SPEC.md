@@ -1,4 +1,4 @@
-# Greenlight — a composable compliance layer for tokenized equities on Solana
+# Vellum — a composable compliance layer for tokenized equities on Solana
 
 **One-liner:** the transfer hook xStocks shipped switched off — an attestation registry + Token-2022 transfer hook that enforces securities compliance on *every* transfer, chain-wide, while keeping the token composable with DeFi (AMMs, lending, routing).
 
@@ -13,7 +13,7 @@
 
 ```
                        ┌─────────────────────────────┐
-  Attestor (KYC        │  greenlight program          │
+  Attestor (KYC        │  vellum program              │
   provider / issuer) ──►  Registry ── Attestation PDA │  per-wallet claims:
                        │  (authority)  ["attest",     │  KYC | ACCREDITED | VENUE
                        │               registry,      │  + jurisdiction (ISO 3166)
@@ -63,13 +63,13 @@ Security details: the hook verifies both token accounts carry the `transferring`
 
 ## Milestones
 
-- **M1 (core, this repo now):** greenlight program + localnet tests proving: attested→attested OK, →unattested rejected, blocked jurisdiction rejected, venue passes, pause halts.
-- **M2 (the shim):** minimal CPMM (`greenlight_amm`) that swaps hooked tokens via `onchain::invoke_transfer_checked` — proof that a venue integrates with ~20 lines; pool authority gets a VENUE attestation.
+- **M1 (core, this repo now):** vellum program + localnet tests proving: attested→attested OK, →unattested rejected, blocked jurisdiction rejected, venue passes, pause halts.
+- **M2 (the shim):** minimal CPMM (`vellum_amm`) that swaps hooked tokens via `onchain::invoke_transfer_checked` — proof that a venue integrates with ~20 lines; pool authority gets a VENUE attestation.
 - **M3 (demo polish):** TS SDK (`sdk/`), demo script minting a mock equity ("AAPLg") with hook + metadata, a wallet UI showing green/red transfer outcomes, pitch deck framing vs Project Open.
 
 ## Demo script (3 min)
 
-1. Issuer mints AAPLg (Token-2022 + Greenlight hook). Alice is KYC'd (US), Dana KYC'd (DE), Bob unattested.
+1. Issuer mints AAPLg (Token-2022 + Vellum hook). Alice is KYC'd (US), Dana KYC'd (DE), Bob unattested.
 2. Alice → Dana: settles instantly. Alice → Bob: **fails inside the token program** — no venue logic, no frontend gating.
 3. Alice swaps AAPLg on the AMM (pool = VENUE): works — a *permissioned* security routed through a permissionless venue.
 4. Issuer adds Dana's jurisdiction to the blocklist / hits pause: the same transfers now fail. Compliance is a policy knob, not a redeploy.
@@ -78,4 +78,4 @@ Security details: the hook verifies both token accounts carry the `transferring`
 
 - Major AMMs (Raydium/Orca) and Jupiter don't route transfer-hook tokens *today* — our CPMM + SDK shows the integration cost is trivial; the ask is ecosystem adoption of the standard resolution helpers.
 - Transfer hooks don't compose with confidential transfers (known Token-2022 limitation).
-- Greenlight is infrastructure, not a securities issuer: demos use mock equities; real issuance needs a licensed issuer/transfer agent (that's the customer, not us).
+- Vellum is infrastructure, not a securities issuer: demos use mock equities; real issuance needs a licensed issuer/transfer agent (that's the customer, not us).
