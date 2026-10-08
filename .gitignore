@@ -5,3 +5,20 @@ target
 node_modules
 test-ledger
 .yarn
+
+# Node V8 compile cache — never belongs in VCS
+node-compile-cache/
+
+# Local demo/validator state and keypairs
+.confidential-demo/
+*.yml.local
+cli.yml
+*-keypair.json
+!target/deploy/*-keypair.json
+
+# Hackathon strategy notes — deliberately kept local, not published
+research/
+
+.env
+.env.*
+*.log
