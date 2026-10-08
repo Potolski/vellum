@@ -68,8 +68,29 @@ already active on a fresh local validator.
 - **`--reset` wipes airdropped balances.** Re-fund every test keypair after a
   validator restart, or steps fail silently with empty output.
 - **The CLI cannot display a *decrypted* confidential balance.** `account-info`
-  shows the ciphertext only; turning it into a number requires the owner's AES
-  key client-side.
+  shows the ciphertext only; turning it into a number requires the owner's keys
+  client-side. `tools/reveal` does it: the CLI derives both keys with
+  `solana_zk_sdk::encryption::derivation::derive_confidential_keys(signer, b"")`
+  — an *empty* public seed, so one key pair per wallet, not per token account.
+  The available balance comes from `decryptableAvailableBalance` (AES, instant);
+  pending credits need ElGamal `decrypt_u32` on the lo/hi halves, recombined as
+  `lo + (hi << 16)`.
+- **The auditor key decrypts transfers, not balances.** Balance ciphertexts are
+  under the holder's key only. What the auditor gets is each `Transfer`
+  instruction's amount, re-encrypted to the auditor key in the instruction data
+  (after the 2-byte tag and the 36-byte new source balance: 64 bytes lo, 64
+  bytes hi). `vellum-reveal audit` sums those with the public deposits and
+  withdrawals. `create-token` has no auditor flag: set it afterwards with
+  `update-confidential-transfer-settings --auditor-pubkey <base64>`, while the
+  issuer still holds the confidential-transfer-mint authority.
+- **No JS client can generate the proofs.** `@solana/spl-token` 0.4 has the
+  extension layouts but no confidential instruction builders, and
+  `@solana-program/zk-elgamal-proof` ships codecs only. Proof generation is
+  Rust-only, so drive the confidential leg with the CLI (or Rust) and keep JS
+  for everything else.
+- **`ConfigureAccount` works on an unapproved account; `Deposit` does not.**
+  With `--enable-confidential-transfers manual`, a deposit before approval
+  fails with custom error `0x18` (`ConfidentialTransferAccountNotApproved`).
 
 ## Verified working flow
 
@@ -83,4 +104,7 @@ Approved: true
 ```
 
 Note it uses `--enable-confidential-transfers auto` to isolate the crypto. The
-product uses `manual`, where approval is gated by `vellum::approve_confidential_account`.
+product uses `manual`, where approval is gated by
+`vellum::approve_confidential_account` — `scripts/confidential-e2e.sh` runs
+that configuration, with the freeze and confidential-transfer authorities both
+held by the policy PDA.

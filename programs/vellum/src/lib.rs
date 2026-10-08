@@ -160,7 +160,11 @@ pub mod vellum {
         paused: bool,
     ) -> Result<()> {
         let policy = &mut ctx.accounts.policy;
-        policy.flags = policy_flags;
+        // CONFIDENTIAL records how the mint was onboarded, not a preference:
+        // clearing it would strand every holder behind a gate that no longer
+        // answers, so it survives updates untouched.
+        policy.flags =
+            (policy_flags & !flags::CONFIDENTIAL) | (policy.flags & flags::CONFIDENTIAL);
         policy.blocked_jurisdictions = blocked_jurisdictions;
         policy.paused = paused;
         Ok(())

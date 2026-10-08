@@ -1,0 +1,17 @@
+[package]
+name = "vellum-reveal"
+version = "0.1.0"
+description = "Decrypt a Token-2022 confidential balance with the holder's own key"
+edition = "2021"
+license = "MIT"
+
+# Standalone on purpose: the zk-sdk line here tracks the patched ZK ElGamal
+# program (see docs/TOOLCHAIN.md) and must not drag the on-chain programs'
+# dependency tree along with it.
+[workspace]
+
+[dependencies]
+base64 = "0.22"
+serde_json = "1"
+solana-keypair = "3"
+solana-zk-sdk = "7.0.1"

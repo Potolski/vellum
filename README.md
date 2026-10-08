@@ -38,7 +38,7 @@ The hook's ExtraAccountMetaList uses account-data seeds, so **standard SPL helpe
 anchor test
 ```
 
-15 tests cover: KYC'd↔KYC'd transfers, unattested rejection, jurisdiction blocklist, VENUE exemption (DeFi composability), revocation + re-attestation, issuer pause/unpause, direct-invocation protection, attestor auth — and the AMM flow where a KYC'd trader's swap succeeds while an unattested trader's identical swap reverts **inside the token program**.
+28 tests. Mode A: KYC'd↔KYC'd transfers, unattested rejection, jurisdiction blocklist, VENUE exemption (DeFi composability), revocation + re-attestation, issuer pause/unpause, direct-invocation protection, attestor auth — and the AMM flow where a KYC'd trader's swap succeeds while an unattested trader's identical swap reverts **inside the token program**. Mode B: accounts are born frozen; only attested holders can be thawed or approved for an encrypted balance; expiry, revocation, a blocked jurisdiction or an issuer pause each close the gate; a compliant holder cannot be re-frozen, including by substituting someone else's attestation account.
 
 ## Demo storyline
 
@@ -50,25 +50,71 @@ anchor test
 
 ## Confidential mode
 
-The public ledger shows nothing. Verified end to end on localnet — a holder's
-account after receiving 1,200 shares and sending 450:
+The public ledger shows nothing; the holder reads their own position back with
+keys derived from their wallet signature; the issuer rebuilds the whole register
+with the mint's auditor key. One run, on localnet, of a real
+Token-2022 confidential mint whose freeze authority *and* confidential-transfer
+authority are the Vellum policy PDA:
+
+```bash
+scripts/confidential-e2e.sh      # 34 asserted steps, including the ones that must fail
+```
 
 ```
-Balance: 0                                  <- what every explorer sees
-Available Balance: 3hi4LKK1W9AIbxgAPZaW...  <- where the 750 shares actually are
-Approved: true
+what any explorer sees:
+  alice  public balance: 0
+           Available Balance: dEvPNqI+DiWsT1YMmVgCums9b51dSeISlemqga...
+  bob    public balance: 0
+           Available Balance: bl+01vo7k+HqJUfvHUaeFHsVusO8N2KhYW7bln...
+
+what each holder sees:
+  alice  available 650.00
+  alice  pending   0.00
+  bob    available 450.00
+  bob    pending   100.00
+
+what the auditor sees:
+  transfers
+    GQkM…ntgK -> BooR…8Js4  450.00
+    GQkM…ntgK -> BooR…8Js4  100.00
+  register
+    BooR…8Js4  public 0.00  confidential 550.00  total 550.00
+    GQkM…ntgK  public 0.00  confidential 650.00  total 650.00
 ```
+
+Along the way the script shows the gate binding: the policy cannot be created
+until the issuer hands over freeze authority, an unattested wallet can be
+neither thawed nor approved, a deposit is rejected until Vellum approves the
+account, and revoking Bob freezes his position (never seizes it) until he is
+re-attested.
+
+The auditor key is set on the mint before the issuer hands the confidential
+authority to the policy PDA; after that nobody can swap it. Balances are
+encrypted to their holders, not to the auditor, so the audit reads them the way
+a transfer agent would: deposits and withdrawals are public, each transfer
+carries its amount encrypted to the auditor key, and the register is the sum.
+The script checks the auditor's figures against each holder's own, and that a
+holder's key cannot run the audit.
+
+`tools/reveal` is the client-side decryption, for holder and auditor (`cargo
+build --release --manifest-path tools/reveal/Cargo.toml`); `scripts/vellum.js`
+is a small client for the registry and gate instructions, and `history <mint>`
+feeds the audit.
 
 Running confidential transfers locally needs two non-obvious version pins (both
 surface as a generic `InvalidInstructionData`) — written up in
-[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md), with a verified baseline in
-`scripts/confidential-baseline.sh`.
+[docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). `scripts/confidential-baseline.sh`
+isolates the crypto from the gate if you need to tell the two apart.
+
+## Landing page
+
+`web/` is the marketing page (Next.js, static export): `cd web && yarn install && yarn dev`.
 
 ## Status / roadmap
 
 - [x] M1 — core registry + hook + policy engine (11 tests)
 - [x] M2 — AMM composability shim (4 tests)
-- [x] M3 — confidential mode: freeze gate + account-level policy; confidential
-      deposit/apply/transfer pipeline proven on localnet
-- [ ] M4 — holder wallet UI (client-side balance decryption), auditor disclosure
-      report, devnet deploy, pitch deck
+- [x] M3 — confidential mode: freeze gate + account-level policy (13 tests),
+      run end to end against a real confidential mint on localnet, with
+      client-side balance decryption and an auditor-key register
+- [ ] M4 — holder wallet UI, devnet deploy
