@@ -20,8 +20,9 @@ with `NEXT_PUBLIC_BASE_PATH=/vellum yarn build`.
 ## Deploying to Vercel
 
 Import the repository and set **Root Directory** to `web`; the repository root
-is the Anchor workspace, not the site. Everything else is detected (Next.js,
-`yarn build`), and there are no environment variables to set. Leave
+is the Anchor workspace, not the site. `vercel.json` pins the framework to
+Next.js, so the build and output settings need no overrides, and there are no
+environment variables to set. Leave
 `NEXT_PUBLIC_BASE_PATH` unset: Vercel serves the site from the domain root.
 
 From a terminal instead: `cd web && npx vercel` (add `--prod` to promote).
