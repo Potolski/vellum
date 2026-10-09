@@ -147,23 +147,44 @@ describe("vellum confidential (account gate)", () => {
     assert.fail(`expected transaction to fail with ${errorName}`);
   };
 
+  // Stands in for the issuer's ElGamal auditor key. Token-2022 stores the 32
+  // bytes as given, and nothing here decrypts with it; the e2e script uses a
+  // real one.
+  const AUDITOR_KEY = Keypair.generate().publicKey.toBuffer();
+  const NO_AUDITOR = Buffer.alloc(32);
+
   /** `ConfidentialTransferInstruction::InitializeMint`. spl-token 0.4 ships the
    *  extension's layout but no instruction builders, so it is encoded by hand:
-   *  authority, auto_approve_new_accounts, auditor ElGamal pubkey (none). */
-  const initializeConfidentialMintIx = (m: PublicKey, authority: PublicKey) =>
+   *  authority, auto_approve_new_accounts, auditor ElGamal pubkey. */
+  const initializeConfidentialMintIx = (
+    m: PublicKey,
+    authority: PublicKey,
+    auditor: Buffer,
+    autoApprove: boolean
+  ) =>
     new TransactionInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       keys: [{ pubkey: m, isSigner: false, isWritable: true }],
       data: Buffer.concat([
         Buffer.from([TokenInstruction.ConfidentialTransferExtension, 0]),
         authority.toBuffer(),
-        Buffer.from([0]), // manual approval: Vellum decides who may hold a ciphertext
-        Buffer.alloc(32),
+        Buffer.from([autoApprove ? 1 : 0]),
+        auditor,
       ]),
     });
 
-  /** A mint as an issuer would configure it for Mode B. */
-  const createConfidentialMint = async (m: Keypair, freezeAuthority: PublicKey) => {
+  /** A mint as an issuer would configure it for Mode B: both authorities with
+   *  the policy PDA, manual approval, an auditor key. Each test that expects a
+   *  refusal overrides the one thing it gets wrong. */
+  const createConfidentialMint = async (
+    m: Keypair,
+    {
+      freezeAuthority = policyOf(m.publicKey),
+      confidentialAuthority = policyOf(m.publicKey),
+      auditor = AUDITOR_KEY,
+      autoApprove = false,
+    } = {}
+  ) => {
     const mintLen = getMintLen([
       ExtensionType.ConfidentialTransferMint,
       ExtensionType.DefaultAccountState,
@@ -177,7 +198,7 @@ describe("vellum confidential (account gate)", () => {
         lamports,
         programId: TOKEN_2022_PROGRAM_ID,
       }),
-      initializeConfidentialMintIx(m.publicKey, policyOf(m.publicKey)),
+      initializeConfidentialMintIx(m.publicKey, confidentialAuthority, auditor, autoApprove),
       createInitializeDefaultAccountStateInstruction(
         m.publicKey,
         AccountState.Frozen,
@@ -214,36 +235,45 @@ describe("vellum confidential (account gate)", () => {
     await attest(karim.publicKey, KP);
   });
 
-  it("refuses a policy when the mint's freeze authority is not the policy PDA", async () => {
-    const decorative = Keypair.generate();
-    await createConfidentialMint(decorative, issuer.publicKey);
-    await expectError(
-      program.methods
-        .initConfidentialPolicy(FLAGS, BLOCKED)
-        .accountsPartial({
-          issuer: issuer.publicKey,
-          mint: decorative.publicKey,
-          registry,
-          policy: policyOf(decorative.publicKey),
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc(),
-      "PolicyNotFreezeAuthority"
-    );
-  });
-
-  it("onboards a confidential mint whose freeze authority is the policy PDA", async () => {
-    await createConfidentialMint(mint, policy);
-    await program.methods
+  const initPolicy = (m: PublicKey) =>
+    program.methods
       .initConfidentialPolicy(FLAGS, BLOCKED)
       .accountsPartial({
         issuer: issuer.publicKey,
-        mint: mint.publicKey,
+        mint: m,
         registry,
-        policy,
+        policy: policyOf(m),
         systemProgram: SystemProgram.programId,
       })
       .rpc();
+
+  it("refuses a policy when the mint's freeze authority is not the policy PDA", async () => {
+    const decorative = Keypair.generate();
+    await createConfidentialMint(decorative, { freezeAuthority: issuer.publicKey });
+    await expectError(initPolicy(decorative.publicKey), "PolicyNotFreezeAuthority");
+  });
+
+  it("refuses a policy when the issuer keeps the confidential transfer authority", async () => {
+    const swappable = Keypair.generate();
+    await createConfidentialMint(swappable, { confidentialAuthority: issuer.publicKey });
+    await expectError(initPolicy(swappable.publicKey), "PolicyNotConfidentialAuthority");
+  });
+
+  it("refuses a policy when the mint auto-approves confidential accounts", async () => {
+    const open = Keypair.generate();
+    await createConfidentialMint(open, { autoApprove: true });
+    await expectError(initPolicy(open.publicKey), "ConfidentialAutoApprove");
+  });
+
+  it("refuses a policy when the mint has no auditor key", async () => {
+    const dark = Keypair.generate();
+    await createConfidentialMint(dark, { auditor: NO_AUDITOR });
+    await expectError(initPolicy(dark.publicKey), "AuditorKeyRequired");
+  });
+
+  it("onboards a confidential mint the policy PDA fully controls", async () => {
+    await createConfidentialMint(mint);
+    await initPolicy(mint.publicKey);
 
     const p = await program.account.policy.fetch(policy);
     assert.equal(p.flags, FLAGS | CONFIDENTIAL);

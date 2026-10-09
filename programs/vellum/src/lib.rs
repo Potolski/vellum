@@ -10,8 +10,11 @@ use spl_tlv_account_resolution::{
     account::ExtraAccountMeta, seeds::Seed, state::ExtraAccountMetaList,
 };
 use spl_token_2022::{
-    extension::{transfer_hook::TransferHookAccount, BaseStateWithExtensions, StateWithExtensions},
-    state::Account as SplTokenAccount,
+    extension::{
+        confidential_transfer::ConfidentialTransferMint, transfer_hook::TransferHookAccount,
+        BaseStateWithExtensions, StateWithExtensions,
+    },
+    state::{Account as SplTokenAccount, Mint as SplMint},
 };
 use spl_transfer_hook_interface::instruction::{ExecuteInstruction, TransferHookInstruction};
 
@@ -180,6 +183,12 @@ pub mod vellum {
     /// Requires the Policy PDA to already hold the mint's freeze authority:
     /// without it the gate would be decorative, so we refuse to create a policy
     /// that cannot actually bind.
+    ///
+    /// The same goes for the confidential configuration. The Policy PDA must
+    /// hold that authority too, approval must be manual, and an auditor key must
+    /// already be set. This program never updates the mint's configuration, so
+    /// once the policy exists the issuer's oversight key is fixed: a Vellum
+    /// confidential mint cannot go dark on its own issuer.
     pub fn init_confidential_policy(
         ctx: Context<InitConfidentialPolicy>,
         policy_flags: u32,
@@ -194,6 +203,26 @@ pub mod vellum {
                 require_keys_eq!(auth, policy_key, VellumError::PolicyNotFreezeAuthority)
             }
             COption::None => return err!(VellumError::PolicyNotFreezeAuthority),
+        }
+        {
+            let mint_info = ctx.accounts.mint.to_account_info();
+            let data = mint_info.try_borrow_data()?;
+            let mint = StateWithExtensions::<SplMint>::unpack(&data)?;
+            let confidential = mint
+                .get_extension::<ConfidentialTransferMint>()
+                .map_err(|_| error!(VellumError::NotConfidentialPolicy))?;
+            require!(
+                Option::<Pubkey>::from(confidential.authority) == Some(policy_key),
+                VellumError::PolicyNotConfidentialAuthority
+            );
+            require!(
+                !bool::from(confidential.auto_approve_new_accounts),
+                VellumError::ConfidentialAutoApprove
+            );
+            require!(
+                confidential.auditor_elgamal_pubkey != Default::default(),
+                VellumError::AuditorKeyRequired
+            );
         }
 
         let policy = &mut ctx.accounts.policy;

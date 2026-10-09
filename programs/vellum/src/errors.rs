@@ -32,4 +32,10 @@ pub enum VellumError {
     NotConfidentialPolicy,
     #[msg("Policy PDA must hold the mint's freeze authority for the gate to bind")]
     PolicyNotFreezeAuthority,
+    #[msg("Policy PDA must hold the mint's confidential transfer authority")]
+    PolicyNotConfidentialAuthority,
+    #[msg("Mint must require approval before an account can hold an encrypted balance")]
+    ConfidentialAutoApprove,
+    #[msg("Mint must name an auditor key before the policy takes over its configuration")]
+    AuditorKeyRequired,
 }
