@@ -25,8 +25,12 @@ import { Vellum } from "../target/types/vellum";
 
 // Claims and policy flags (mirror of state.rs)
 const KYC = 1 << 0;
+const ACCREDITED = 1 << 1;
+const VENUE = 1 << 2;
 const REQUIRE_SENDER_KYC = 1 << 0;
 const REQUIRE_RECEIVER_KYC = 1 << 1;
+const ALLOW_VENUES = 1 << 2;
+const REQUIRE_RECEIVER_ACCREDITED = 1 << 3;
 const CONFIDENTIAL = 1 << 4;
 
 const US = 840;
@@ -88,9 +92,9 @@ describe("vellum confidential (account gate)", () => {
   const FLAGS = REQUIRE_SENDER_KYC | REQUIRE_RECEIVER_KYC;
   const BLOCKED = blocked(KP);
 
-  const attest = (subject: PublicKey, jurisdiction: number, expiresAt = 0) =>
+  const attest = (subject: PublicKey, jurisdiction: number, expiresAt = 0, claims = KYC) =>
     program.methods
-      .attest(subject, KYC, jurisdiction, new BN(expiresAt))
+      .attest(subject, claims, jurisdiction, new BN(expiresAt))
       .accountsPartial({
         attestor: attestor.publicKey,
         registry,
@@ -235,9 +239,9 @@ describe("vellum confidential (account gate)", () => {
     await attest(karim.publicKey, KP);
   });
 
-  const initPolicy = (m: PublicKey) =>
+  const initPolicy = (m: PublicKey, policyFlags = FLAGS) =>
     program.methods
-      .initConfidentialPolicy(FLAGS, BLOCKED)
+      .initConfidentialPolicy(policyFlags, BLOCKED)
       .accountsPartial({
         issuer: issuer.publicKey,
         mint: m,
@@ -390,5 +394,68 @@ describe("vellum confidential (account gate)", () => {
     // setPaused passed flags without CONFIDENTIAL, twice.
     const p = await program.account.policy.fetch(policy);
     assert.equal(p.flags, FLAGS | CONFIDENTIAL);
+  });
+
+  // A second mint with a stricter policy. In Mode B one account both sends and
+  // receives, so the receiver-side rules apply to anyone who holds at all.
+  describe("accredited-only mint that admits venues", () => {
+    const restricted = Keypair.generate();
+    const dana = Keypair.generate(); // KYC + ACCREDITED
+    const pool = Keypair.generate(); // VENUE only: an AMM or lending vault
+
+    const accountOf = (owner: PublicKey) =>
+      getAssociatedTokenAddressSync(restricted.publicKey, owner, false, TOKEN_2022_PROGRAM_ID);
+    const thawRestricted = (owner: PublicKey) =>
+      program.methods
+        .thawIfAttested()
+        .accountsPartial({
+          ...gate(owner),
+          mint: restricted.publicKey,
+          tokenAccount: accountOf(owner),
+          policy: policyOf(restricted.publicKey),
+        })
+        .rpc();
+    const frozen = async (owner: PublicKey) =>
+      (await getAccount(connection, accountOf(owner), "confirmed", TOKEN_2022_PROGRAM_ID))
+        .isFrozen;
+
+    before("mint, policy, attestations, accounts", async () => {
+      await createConfidentialMint(restricted);
+      await initPolicy(
+        restricted.publicKey,
+        FLAGS | REQUIRE_RECEIVER_ACCREDITED | ALLOW_VENUES
+      );
+      await attest(dana.publicKey, US, 0, KYC | ACCREDITED);
+      await attest(pool.publicKey, 0, 0, VENUE);
+
+      const tx = new Transaction();
+      for (const owner of [alice, dana, pool].map((k) => k.publicKey)) {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            issuer.publicKey,
+            accountOf(owner),
+            owner,
+            restricted.publicKey,
+            TOKEN_2022_PROGRAM_ID
+          )
+        );
+      }
+      await provider.sendAndConfirm(tx);
+    });
+
+    it("refuses to thaw a KYC'd holder who is not accredited", async () => {
+      await expectError(thawRestricted(alice.publicKey), "AccreditationRequired");
+      assert.isTrue(await frozen(alice.publicKey));
+    });
+
+    it("thaws an accredited holder", async () => {
+      await thawRestricted(dana.publicKey);
+      assert.isFalse(await frozen(dana.publicKey));
+    });
+
+    it("thaws a venue without KYC", async () => {
+      await thawRestricted(pool.publicKey);
+      assert.isFalse(await frozen(pool.publicKey));
+    });
   });
 });
