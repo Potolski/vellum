@@ -120,28 +120,32 @@ fn balance(
     Ok(())
 }
 
-/// Rebuilds every holder's position. Balances are encrypted to their holders,
+/// A decrypted transfer: source account, destination account, raw amount.
+type Transfer = (String, String, u64);
+
+/// Replays a mint's confidential history into the net encrypted balance of
+/// each token account, in raw units. Balances are encrypted to their holders,
 /// not to the auditor, so the auditor reads them the way a transfer agent
 /// would: deposits and withdrawals are public, and each transfer carries its
 /// amount encrypted to the auditor key.
-fn audit(history: &Value, secret: &ElGamalSecretKey) -> Result<()> {
-    let decimals = history["decimals"].as_u64().unwrap_or(0) as u32;
-    let list = |name: &str| history[name].as_array().cloned().unwrap_or_default();
-
+fn replay(
+    events: &[Value],
+    secret: &ElGamalSecretKey,
+) -> Result<(Vec<Transfer>, BTreeMap<String, i128>)> {
     let mut confidential: BTreeMap<String, i128> = BTreeMap::new();
     let mut transfers = Vec::new();
-    for event in list("events") {
+    for event in events {
         let account = event["account"].as_str().ok_or("missing account")?.to_string();
         match event["kind"].as_str() {
             Some("deposit") => {
-                *confidential.entry(account).or_default() += raw_amount(&event, "amount")? as i128
+                *confidential.entry(account).or_default() += raw_amount(event, "amount")? as i128
             }
             Some("withdraw") => {
-                *confidential.entry(account).or_default() -= raw_amount(&event, "amount")? as i128
+                *confidential.entry(account).or_default() -= raw_amount(event, "amount")? as i128
             }
             Some("transfer") => {
-                let amount = decrypt(secret, &event, "lo")?
-                    + (decrypt(secret, &event, "hi")? << AMOUNT_LO_BITS);
+                let amount = decrypt(secret, event, "lo")?
+                    + (decrypt(secret, event, "hi")? << AMOUNT_LO_BITS);
                 let destination = event["destination"]
                     .as_str()
                     .ok_or("missing destination")?
@@ -153,6 +157,15 @@ fn audit(history: &Value, secret: &ElGamalSecretKey) -> Result<()> {
             _ => return Err("unknown event kind".into()),
         }
     }
+    Ok((transfers, confidential))
+}
+
+/// Prints the register: every transfer in the clear, then each holder's
+/// public and confidential position.
+fn audit(history: &Value, secret: &ElGamalSecretKey) -> Result<()> {
+    let decimals = history["decimals"].as_u64().unwrap_or(0) as u32;
+    let list = |name: &str| history[name].as_array().cloned().unwrap_or_default();
+    let (transfers, confidential) = replay(&list("events"), secret)?;
 
     let accounts = list("accounts");
     let owner_of = |address: &str| {
@@ -196,4 +209,58 @@ fn ui_amount(raw: u64, decimals: u32) -> String {
     }
     let unit = 10u64.pow(decimals);
     format!("{}.{:0width$}", raw / unit, raw % unit, width = decimals as usize)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use solana_zk_sdk::encryption::elgamal::ElGamalKeypair;
+
+    /// A transfer event as `vellum.js history` emits it, with the amount split
+    /// and encrypted to `auditor` the way Token-2022 does.
+    fn transfer(auditor: &ElGamalKeypair, from: &str, to: &str, amount: u64) -> Value {
+        let encrypt = |part: u64| STANDARD.encode(auditor.pubkey().encrypt(part).to_bytes());
+        json!({
+            "kind": "transfer",
+            "account": from,
+            "destination": to,
+            "lo": encrypt(amount & ((1 << AMOUNT_LO_BITS) - 1)),
+            "hi": encrypt(amount >> AMOUNT_LO_BITS),
+        })
+    }
+
+    #[test]
+    fn replay_sums_deposits_withdrawals_and_decrypted_transfers() {
+        let auditor = ElGamalKeypair::new_rand();
+        let events = vec![
+            json!({ "kind": "deposit", "account": "alice", "amount": "120000" }),
+            transfer(&auditor, "alice", "bob", 45_000),
+            // Above 16 bits, so both halves of the ciphertext carry value.
+            transfer(&auditor, "alice", "bob", 70_000),
+            json!({ "kind": "withdraw", "account": "bob", "amount": "15000" }),
+        ];
+
+        let (transfers, balances) = replay(&events, auditor.secret()).unwrap();
+
+        assert_eq!(transfers[1], ("alice".into(), "bob".into(), 70_000));
+        assert_eq!(balances["alice"], 5_000);
+        assert_eq!(balances["bob"], 100_000);
+    }
+
+    #[test]
+    fn replay_fails_under_a_key_the_transfers_were_not_encrypted_to() {
+        let auditor = ElGamalKeypair::new_rand();
+        let stranger = ElGamalKeypair::new_rand();
+        let events = vec![transfer(&auditor, "alice", "bob", 45_000)];
+
+        assert!(replay(&events, stranger.secret()).is_err());
+    }
+
+    #[test]
+    fn ui_amount_places_the_decimal_point() {
+        assert_eq!(ui_amount(65_000, 2), "650.00");
+        assert_eq!(ui_amount(5, 2), "0.05");
+        assert_eq!(ui_amount(42, 0), "42");
+    }
 }
