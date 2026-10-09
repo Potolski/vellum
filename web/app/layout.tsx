@@ -27,7 +27,12 @@ const mono = IBM_Plex_Mono({
 const description =
   "Compliant and confidential tokenized stocks on Solana. KYC and jurisdiction rules enforced; balances encrypted.";
 
+// Link previews need absolute image URLs. Vercel provides the production
+// domain at build time; elsewhere Next falls back to localhost.
+const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
 export const metadata: Metadata = {
+  metadataBase: productionHost ? new URL(`https://${productionHost}`) : undefined,
   title: "Vellum · The confidential share register",
   description,
   openGraph: {
@@ -35,6 +40,7 @@ export const metadata: Metadata = {
     description,
     type: "website",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
