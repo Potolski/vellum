@@ -248,18 +248,6 @@ const commands = {
     const config = getExtensionData(ExtensionType.ConfidentialTransferMint, mintInfo.tlvData);
     const auditor = config?.subarray(33, 33 + ELGAMAL_PUBKEY_LEN);
 
-    const held = await connection.getProgramAccounts(TOKEN_2022_PROGRAM_ID, {
-      filters: [{ memcmp: { offset: 0, bytes: mint.toBase58() } }],
-    });
-    const accounts = held.map(({ pubkey, account }) => {
-      const { owner, amount } = unpackAccount(pubkey, account, TOKEN_2022_PROGRAM_ID);
-      return {
-        address: pubkey.toBase58(),
-        owner: owner.toBase58(),
-        publicBalance: amount.toString(),
-      };
-    });
-
     // Deposit, Withdraw and Transfer all name the mint, so its signature
     // history is the complete confidential history. Newest first, paged.
     const signatures = [];
@@ -270,17 +258,43 @@ const commands = {
       before = page[page.length - 1].signature;
     }
 
+    // The holders come out of the same history: any token account of this
+    // mint shows up in a transaction's token balances. Public RPC nodes refuse
+    // to scan the token program for them.
+    const seen = new Map();
     const events = [];
     for (const signature of signatures.reverse()) {
       const tx = await connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
       });
       if (!tx) continue;
+      const keys = tx.transaction.message.getAccountKeys({
+        accountKeysFromLookups: tx.meta.loadedAddresses,
+      });
+      for (const balance of tx.meta.postTokenBalances ?? []) {
+        if (balance.mint !== mint.toBase58()) continue;
+        const address = keys.get(balance.accountIndex);
+        seen.set(address.toBase58(), address);
+      }
       for (const ix of tokenInstructions(tx)) {
         const event = confidentialEvent(ix, mint);
         if (event) events.push({ signature, ...event });
       }
     }
+
+    const addresses = [...seen.values()];
+    const infos = await connection.getMultipleAccountsInfo(addresses);
+    const accounts = addresses.flatMap((address, i) => {
+      if (!infos[i]) return []; // closed since
+      const { owner, amount } = unpackAccount(address, infos[i], TOKEN_2022_PROGRAM_ID);
+      return [
+        {
+          address: address.toBase58(),
+          owner: owner.toBase58(),
+          publicBalance: amount.toString(),
+        },
+      ];
+    });
 
     console.log(
       JSON.stringify({
