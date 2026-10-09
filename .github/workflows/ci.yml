@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOLANA_VERSION: 4.0.2
+  ANCHOR_VERSION: 0.31.1
+
+jobs:
+  programs:
+    name: Programs (anchor test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Install Anchor CLI
+        run: npm install -g @coral-xyz/anchor-cli@${ANCHOR_VERSION}
+
+      # The program keypairs are not in the repository, so CI deploys under
+      # throwaway IDs and points the sources at them.
+      - name: Generate keypairs
+        run: |
+          solana-keygen new --no-bip39-passphrase -s -o ~/.config/solana/id.json
+          mkdir -p target/deploy
+          solana-keygen new --no-bip39-passphrase -s -o target/deploy/vellum-keypair.json
+          solana-keygen new --no-bip39-passphrase -s -o target/deploy/vellum_amm-keypair.json
+          anchor keys sync
+
+      - run: yarn install --frozen-lockfile
+      - run: anchor test
+
+  reveal:
+    name: Decryption tool (cargo test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/reveal
+      - run: cargo test --locked --manifest-path tools/reveal/Cargo.toml
+
+  web:
+    name: Landing page (next build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
