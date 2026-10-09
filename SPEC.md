@@ -1,15 +1,38 @@
-# Vellum — a composable compliance layer for tokenized equities on Solana
+# Vellum: the compliance layer
 
-**One-liner:** the transfer hook xStocks shipped switched off — an attestation registry + Token-2022 transfer hook that enforces securities compliance on *every* transfer, chain-wide, while keeping the token composable with DeFi (AMMs, lending, routing).
+Vellum is an on-chain attestation registry and policy engine for tokenized
+securities on Solana. An attestor (a KYC provider or the issuer) records what it
+knows about a wallet; an issuer attaches a policy to its mint; the token program
+itself refuses any movement the policy does not allow.
 
-## Why (the gap)
+This document covers the registry, the policy, and **Mode A**, where the policy
+runs on every transfer through a Token-2022 transfer hook and amounts are
+public. **Mode B**, where balances are encrypted and the policy runs at the
+account level, is specified in [SPEC-confidential.md](SPEC-confidential.md).
+Both modes share the same registry and attestations.
 
-- xStocks tokens on Solana ship with a Token-2022 **transfer hook initialized but disabled** — because hooks break DeFi integrations (Solana Foundation xStocks case study).
-- US-facing tokenized equities (Superstate, Securitize, Dinari) all need per-transfer compliance; today each builds a proprietary allowlist, and none composes with permissionless DeFi.
-- Project Open (Solana Policy Institute → SEC) proposes "Token Shares": registered equities traded wallet-to-wallet with KYC'd wallets. That needs exactly this primitive: **policy-enforced transfers that don't sacrifice composability**.
-- Structural edge over EVM: a Solana transfer hook binds at the *token program* level — enforced in every venue and CPI. Uniswap v4 hooks only bind one pool; Base's B20 policy registry is a Coinbase-controlled precompile, closed to third-party issuers. ERC-3643 exists but breaks vanilla-ERC-20 composability.
+## The problem
 
-## Architecture
+A regulated security has transfer restrictions: who may hold it, where they
+are, whether they are accredited. On Solana today those restrictions are
+enforced, if at all, in the issuer's own front end or in a proprietary
+allowlist.
+
+- Tokenized stocks already on Solana ship with a Token-2022 transfer hook
+  **initialized but disabled**, because an enabled hook breaks most DeFi
+  integrations.
+- Issuers that need per-transfer compliance each build their own allowlist.
+  None of them composes with a permissionless venue.
+- Proposals for registered equities traded wallet to wallet between KYC'd
+  holders need exactly this: transfers that enforce policy without giving up
+  composability.
+
+A Solana transfer hook binds at the token program, so it is enforced in every
+venue and every cross-program call, not in one pool or one app. Vellum is that
+hook, built so that venues can integrate without writing any Vellum-specific
+code.
+
+## How it works
 
 ```
                        ┌─────────────────────────────┐
@@ -31,51 +54,102 @@
    lending, CPI    └──────────────────────────────────┘
 ```
 
-### Accounts
+1. An attestor creates a **registry** and issues **attestations** to wallets.
+2. An issuer creates a **policy** for its mint, naming the registry it trusts.
+3. On every transfer, Token-2022 calls the hook. The hook loads the policy and
+   both parties' attestations and either lets the transfer through or fails it.
+
+A rejected transfer fails inside the token program. There is no venue logic and
+no front-end gating to bypass.
+
+## Accounts
 
 | Account | Seeds | Contents |
 |---|---|---|
-| `Registry` | `["registry", authority]` | attestor authority allowed to issue claims |
+| `Registry` | `["registry", authority]` | the attestor allowed to issue claims |
 | `Attestation` | `["attest", registry, subject]` | claims bitmask, jurisdiction (ISO 3166-1 numeric), expiry |
 | `Policy` | `["policy", mint]` | issuer, trusted registry, flags, blocked jurisdictions, paused |
-| ExtraAccountMetaList | `["extra-account-metas", mint]` | tells Token-2022 to pass Policy + both parties' Attestations to the hook |
+| ExtraAccountMetaList | `["extra-account-metas", mint]` | tells Token-2022 to pass the policy and both attestations to the hook |
 
-The extra-account resolution uses **account-data seeds**: the attestation PDAs are derived from the token accounts' `owner` field (offset 32) and the policy's `registry` field — so *any* client or CPI caller (AMM, lending protocol) resolves them automatically with the standard SPL helpers (`createTransferCheckedWithTransferHookInstruction` off-chain, `onchain::invoke_transfer_checked` on-chain). That auto-resolution is the whole composability story.
+### Claims
+
+An attestation carries any combination of:
+
+- `KYC`: the wallet's owner has been identified.
+- `ACCREDITED`: the owner is an accredited investor.
+- `VENUE`: the wallet is a compliant venue, such as an AMM pool authority or a
+  lending vault.
+
+plus a jurisdiction and an optional expiry. Attestations are public accounts:
+anyone can see that a wallet is attested, by whom, and for which jurisdiction.
 
 ### Policy flags
 
-- `REQUIRE_SENDER_KYC` / `REQUIRE_RECEIVER_KYC` — both parties must hold a valid KYC attestation from the policy's registry
-- `ALLOW_VENUES` — a wallet with a `VENUE` claim (AMM pool authority, lending vault) passes without KYC: this is how a permissioned token still LPs, swaps and collateralizes
-- `REQUIRE_RECEIVER_ACCREDITED` — Reg D-style gating
-- `blocked_jurisdictions` — receiver-side ISO-3166 blocklist
-- `paused` — issuer emergency halt (regulatory stop, corporate action)
+- `REQUIRE_SENDER_KYC` / `REQUIRE_RECEIVER_KYC`: the party must hold a valid
+  `KYC` attestation from the policy's registry.
+- `ALLOW_VENUES`: a wallet with a `VENUE` claim passes without KYC. This is how
+  a permissioned token can still be pooled, swapped and used as collateral.
+- `REQUIRE_RECEIVER_ACCREDITED`: the receiver must hold an `ACCREDITED` claim.
+- `blocked_jurisdictions`: up to eight ISO 3166 codes a receiver may not be in.
+- `paused`: the issuer halts every transfer (regulatory stop, corporate action).
 
-### Instructions
+Changing a flag, the blocklist or the pause takes effect on the next transfer in
+every venue. Nothing is redeployed.
 
-1. `init_registry(attestor)` — create attestor registry
-2. `attest(claims, jurisdiction, expires_at)` — issue/update a wallet's attestation (attestor-signed)
-3. `revoke()` — close an attestation
-4. `init_policy(flags, blocked_jurisdictions)` — create Policy + ExtraAccountMetaList for a mint (one call onboards a mint)
-5. `update_policy(flags, blocked_jurisdictions, paused)` — issuer-only
-6. `transfer_hook (Execute)` — invoked by Token-2022 on every transfer; validates or rejects
+## Instructions
 
-Security details: the hook verifies both token accounts carry the `transferring` flag (can't be invoked outside a real transfer), attestation fields are matched against the policy's registry and the token-account owners, and expiry is checked against the clock.
+| Instruction | Signer | Effect |
+|---|---|---|
+| `init_registry(attestor)` | registry authority | creates a registry |
+| `attest(subject, claims, jurisdiction, expires_at)` | attestor | issues or updates a wallet's attestation |
+| `revoke(subject)` | attestor | closes an attestation |
+| `init_policy(flags, blocked_jurisdictions)` | issuer | creates the policy and the hook's account list for a mint, in one call |
+| `update_policy(flags, blocked_jurisdictions, paused)` | issuer | changes the policy |
+| `transfer_hook` (Execute) | Token-2022 | validates or rejects a transfer |
 
-## Milestones
+## Composability
 
-- **M1 (core, this repo now):** vellum program + localnet tests proving: attested→attested OK, →unattested rejected, blocked jurisdiction rejected, venue passes, pause halts.
-- **M2 (the shim):** minimal CPMM (`vellum_amm`) that swaps hooked tokens via `onchain::invoke_transfer_checked` — proof that a venue integrates with ~20 lines; pool authority gets a VENUE attestation.
-- **M3 (demo polish):** TS SDK (`sdk/`), demo script minting a mock equity ("AAPLg") with hook + metadata, a wallet UI showing green/red transfer outcomes, pitch deck framing vs Project Open.
+The hook needs three extra accounts on every transfer: the policy and each
+party's attestation. Their addresses are derived from data already in the
+transaction: the attestation PDAs come from each token account's `owner` field
+and the policy's `registry` field.
 
-## Demo script (3 min)
+Because of that, the standard SPL helpers resolve everything on their own:
+`createTransferCheckedWithTransferHookInstruction` off-chain, and
+`spl_token_2022::onchain::invoke_transfer_checked` from another program. A
+venue that already uses those helpers supports a Vellum token with no
+Vellum-specific code.
 
-1. Issuer mints AAPLg (Token-2022 + Vellum hook). Alice is KYC'd (US), Dana KYC'd (DE), Bob unattested.
-2. Alice → Dana: settles instantly. Alice → Bob: **fails inside the token program** — no venue logic, no frontend gating.
-3. Alice swaps AAPLg on the AMM (pool = VENUE): works — a *permissioned* security routed through a permissionless venue.
-4. Issuer adds Dana's jurisdiction to the blocklist / hits pause: the same transfers now fail. Compliance is a policy knob, not a redeploy.
+`vellum_amm`, a minimal constant-product AMM in this repository, demonstrates
+it. Its pool authority holds a `VENUE` attestation. A KYC'd trader's swap goes
+through; an unattested trader's identical swap reverts in the hook.
 
-## Honest limitations (for the pitch)
+## Security properties
 
-- Major AMMs (Raydium/Orca) and Jupiter don't route transfer-hook tokens *today* — our CPMM + SDK shows the integration cost is trivial; the ask is ecosystem adoption of the standard resolution helpers.
-- Transfer hooks don't compose with confidential transfers (known Token-2022 limitation).
-- Vellum is infrastructure, not a securities issuer: demos use mock equities; real issuance needs a licensed issuer/transfer agent (that's the customer, not us).
+- **The hook cannot be called outside a real transfer.** It checks that both
+  token accounts carry Token-2022's `transferring` flag.
+- **Attestations cannot be substituted.** Each one is checked against the
+  policy's registry and against the owner of the token account it is presented
+  for.
+- **Expiry is enforced on-chain**, against the cluster clock.
+- **Only the attestor can attest or revoke; only the issuer can change a
+  policy.**
+
+## Limits
+
+- **Venue support is not universal.** The large Solana AMMs and aggregators do
+  not route transfer-hook tokens today. The integration is small (see
+  `vellum_amm`), but it is each venue's to make.
+- **No confidentiality in this mode.** Token-2022 does not allow a transfer hook
+  and confidential transfers on the same mint. Mode B exists for that.
+- **Vellum is infrastructure, not an issuer.** The tests and demos use mock
+  equities. Issuing a real security needs a licensed issuer or transfer agent,
+  who would be the user of this program.
+- **Not audited.** The programs run on a local validator and have not been
+  reviewed by a third party.
+
+## Status
+
+Both programs are implemented and tested: `anchor test` runs 28 tests, 15 of
+them for this mode (registry, policy, hook and the AMM flow). The
+[README](README.md) has the commands.

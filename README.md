@@ -40,7 +40,7 @@ anchor test
 
 28 tests. Mode A: KYC'd↔KYC'd transfers, unattested rejection, jurisdiction blocklist, VENUE exemption (DeFi composability), revocation + re-attestation, issuer pause/unpause, direct-invocation protection, attestor auth — and the AMM flow where a KYC'd trader's swap succeeds while an unattested trader's identical swap reverts **inside the token program**. Mode B: accounts are born frozen; only attested holders can be thawed or approved for an encrypted balance; expiry, revocation, a blocked jurisdiction or an issuer pause each close the gate; a compliant holder cannot be re-frozen, including by substituting someone else's attestation account.
 
-## Demo storyline
+## Transfer-hook mode, step by step
 
 1. Issuer mints an equity token with the Vellum hook; policy: sender+receiver KYC required, venues allowed, sanctioned jurisdictions blocked.
 2. Alice (KYC'd) → Dana (KYC'd): instant settlement. Alice → Bob (unattested): rejected by Token-2022 itself.

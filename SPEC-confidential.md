@@ -1,134 +1,192 @@
-# Vellum Confidential — compliant *and* confidential tokenized equities
+# Vellum: confidential mode
 
-Addendum to `SPEC.md`. Written 2026-10-06. Submission deadline **2026-10-12 23:59 BRT**.
+Confidential mode (Mode B) keeps a tokenized security's transfer restrictions
+while encrypting what each holder owns. Holders stay named on the register;
+their balances and transfer amounts are ciphertext on-chain, readable by the
+holder and by the issuer's auditor key.
 
----
+It uses the same registry and attestations as the transfer-hook mode described
+in [SPEC.md](SPEC.md). An issuer picks one mode per mint.
 
-## 1. Why the sub-wallet splitting idea doesn't work
+## Why balances need to be private
 
-The proposal: one user wallet, N derived sub-wallets, split the position across them so the total balance is unknowable.
+A public ledger publishes every position. For an institution that means large
+orders can be front-run, a portfolio's composition is visible to competitors,
+ownership thresholds are visible before they are reported, and equity
+compensation can be read by anyone. It is a widely cited barrier to putting
+real securities on a public chain.
 
-It fails, and it fails worse here than for a generic token.
+Traditional markets do not work that way. Most US shares are registered to a
+single nominee, Cede & Co., and the beneficial owners are known only down the
+custody chain. Confidential mode restores that property: the issuer and its
+transfer agent know the register, the market does not.
 
-**The killer, specific to this product.** `Attestation` is a PDA at `["attest", registry, subject]` where `subject` is the token-account **owner**. A compliance-gated security therefore requires *every holding wallet to publish its own attestation account on-chain*, signed by the same attestor, with `jurisdiction` in plaintext. Those accounts are enumerable — `getProgramAccounts` filtered on `Attestation.registry` returns the complete holder set, and the attestor's signature plus block proximity clusters them by issuance batch. **The compliance layer is a public ownership index.** Splitting across sub-wallets publishes exactly the cluster it's meant to hide. This isn't a detail to patch: a regulated security requires the issuer/transfer agent to know every holder, so a per-wallet on-chain record is non-negotiable.
+## The constraint
 
-**And the generic failures, all of which also apply:**
-- *Funding graph* — sub-wallets have to be funded. The first transfer out of the parent links them permanently.
-- *Fee payer* — rent and fees come from somewhere; a shared payer links every wallet in the set.
-- *Timing* — wallets created and funded in the same block or batch cluster trivially.
-- *Consolidation* — the moment the user sells or rebalances, the wallets co-sign or sequence together and the set collapses.
-- *It doesn't even hide amounts* — each sub-wallet's balance stays public. Known supply minus known holders narrows the unknown fast.
-- *Cost* — rent, ATA creation and attestation accounts scale linearly with N.
+Token-2022's `ConfidentialTransfer` extension stores balances and transfer
+amounts as ElGamal ciphertexts. Addresses stay public; amounts do not. The mint
+can name an **auditor key** to which every transfer amount is also encrypted.
 
-This is Bitcoin address-splitting. Clustering heuristics have defeated it for over a decade, and here we'd be handing the adversary a labelled index for free.
+Token-2022 does not allow `ConfidentialTransfer` and `TransferHook` on the same
+mint, because a hook is handed the plaintext amount. Taken at face value, a
+tokenized security can be compliant or confidential, not both.
 
-**The fix is to encrypt the balance, not scatter it.**
+## The design: move the check from the transfer to the account
 
----
+Vellum's policy never uses the amount. It checks facts about the holder: KYC,
+accreditation, jurisdiction, expiry. Those can be checked when an account opens
+rather than on each transfer.
 
-## 2. The primitive that does work, and why now
+- The mint sets `DefaultAccountState = Frozen`. Every new token account starts
+  unusable.
+- The mint's **freeze authority** is the Vellum `Policy` PDA. Only the program
+  can thaw an account, and it does so only for an eligible holder.
+- The mint's confidential transfers require approval, and the **approval
+  authority** is the same PDA. Only the program can let an account hold an
+  encrypted balance.
+- When a holder stops being eligible, anyone can ask the program to freeze the
+  account again.
 
-**Token-2022 `ConfidentialTransfer`**: balances and transfer amounts are ElGamal ciphertexts. Addresses stay public; *amounts do not*. The mint can designate an **`auditor_elgamal_pubkey`** that decrypts every amount — compliance readable by the issuer, opaque to everyone else.
+`DefaultAccountState` is compatible with `ConfidentialTransfer`. The pattern is
+that of sRFC-37 (Token ACL), the Solana Foundation's permissioned-token
+standard.
 
-Timing, which is the whole "why now":
-
-| Date | Event |
-|---|---|
-| Apr 2025 | Confidential Balances ships — "first ZK-powered encrypted token standard built for institutional compliance" |
-| **19 Jun 2025** | ZK ElGamal Proof Program **disabled** (epoch 805) after a soundness bug |
-| **4 Jun 2026** | **Re-enabled** on mainnet (epoch 982) |
-| ~18 Jun 2026 | Token-2022 redeployed with the confidential instructions |
-| 16 Jul 2026 | ZK ElGamal JS SDK v0.3.2; web3.js support landing |
-
-**The primitive has been usable on mainnet for ~4 months.** It was dark for the preceding year, which is why nothing is built on it yet.
-
----
-
-## 3. The insight
-
-> **Token-2022 forbids `TransferHook` and `ConfidentialTransfer` on the same mint.** A tokenized security can be compliant or confidential — never both.
-
-(`SPEC.md` already lists this under honest limitations. Confirmed: `ConfidentialTransfer` is mutually exclusive with `TransferHook`, `TransferFeeConfig` and `PermanentDelegate`, because hooks are handed the plaintext amount.)
-
-Everyone reads that as a dead end. It isn't, because **Vellum's policy never needed the amount.** It checks identity: KYC claim, accreditation, jurisdiction, expiry. The amount argument is ignored. The incompatibility is an artifact of the extension design, not of the policy.
-
-So: **move enforcement from the transfer to the account.**
-
-- `DefaultAccountState = Frozen` — every new token account is born unusable.
-- Freeze authority delegated to the Vellum program.
-- A `thaw_if_attested` instruction thaws an account *only* if its owner holds a valid attestation in the policy's registry.
-- `ConfidentialTransferMint` with `auto_approve_new_accounts = false` — confidential configuration is also gated.
-
-`DefaultAccountState` **is** compatible with `ConfidentialTransferMint`. And this is not a bespoke trick: it's the shape of **sRFC-37 / Token ACL**, the Solana Foundation's permissioned-token standard (`solana-foundation/token-acl`), which exists precisely because hooks are not always available.
-
-**One attestation registry, two enforcement modes:**
-
-| | Mode A — Hook *(built)* | Mode B — Confidential *(this sprint)* |
+| | Mode A: hook | Mode B: confidential |
 |---|---|---|
-| Enforcement | per **transfer**, via transfer hook | per **account**, via freeze gate |
+| Enforced | per **transfer**, by the transfer hook | per **account**, by the freeze gate |
 | Amounts | public | **ElGamal-encrypted** |
-| Oversight | public ledger | **auditor key** decrypts |
-| Composability | AMM / lending / any CPI | holding + direct transfer only |
-| Use | trading venue leg | institutional / cap-table leg |
+| Oversight | public ledger | **auditor key** |
+| Works with | AMMs, lending, any CPI | holding and direct transfer |
+| Use | trading venue leg | cap table, institutional leg |
 
-Same `Registry`, same `Attestation`, same attestor. The issuer picks the mode per mint.
+## Eligibility
 
----
+A token account both sends and receives, and there is no per-transfer check, so
+to hold the asset a wallet must satisfy the policy's sender and receiver rules
+together:
 
-## 4. What Mode B hides — stated precisely
+- a valid, unexpired `KYC` attestation from the policy's registry, if the
+  policy requires KYC of either party;
+- an `ACCREDITED` claim, if the policy requires accreditation;
+- a jurisdiction that is not on the policy's blocklist;
+- or a `VENUE` claim, if the policy allows venues.
 
-**Hides:** account balances, transfer amounts, position sizes, portfolio composition by value.
+This is stricter than Mode A for any single transfer.
 
-**Does not hide:** that wallet A transferred to wallet B, who holds the asset at all, or the holder set.
+## Instructions
 
-For a *security* that split is arguably correct — the transfer agent is legally required to know its holders — and it is exactly the stated goal: **the total balance is private.** It is **not** anonymity, and the pitch must not claim it is.
+| Instruction | Signer | Effect |
+|---|---|---|
+| `init_confidential_policy(flags, blocked_jurisdictions)` | issuer | creates the policy. Fails unless the Policy PDA already holds the mint's freeze authority, so a policy that cannot enforce anything cannot exist |
+| `thaw_if_attested` | anyone | thaws an account whose owner is eligible |
+| `approve_confidential_account` | anyone | approves an eligible owner's account to hold an encrypted balance |
+| `refreeze_if_invalid` | anyone | freezes an account whose owner is no longer eligible. Fails if the owner is still eligible |
+| `update_policy(flags, blocked_jurisdictions, paused)` | issuer | changes the rules or pauses the mint |
 
-**Why balance privacy is the actual institutional blocker.** Public positions mean: front-running of large orders, portfolio composition leaking to competitors, 13D/13G threshold crossings visible before filing, employee compensation legible to anyone. This is documented as the central barrier to institutional RWA adoption — the "privacy–transparency dilemma". No desk puts a real book on a ledger where every rival reads its size.
+The three gate instructions take no issuer signature. Their outcome depends
+only on the registry's state, so it does not matter who calls them.
 
----
+### Lifecycle of an account
 
-## 5. Honest trade-offs (for the pitch and the technical video)
+1. **Born frozen.** The holder creates a token account. It cannot receive or
+   send.
+2. **Thawed if attested.** Once the holder has a valid attestation,
+   `thaw_if_attested` opens the account and `approve_confidential_account` lets
+   it hold an encrypted balance.
+3. **Refrozen if invalid.** If the attestation expires or is revoked, the
+   holder's jurisdiction is blocked, or the issuer pauses the mint,
+   `refreeze_if_invalid` closes the account again.
 
-1. **Per-account gating is coarser than per-transfer.** Jurisdiction is checked at thaw, not on every transfer. Mitigation: `refreeze_if_invalid`, a permissionless crank anyone can call once an attestation expires or is revoked — the position is frozen, never seized.
-2. **No amount-based policy.** No per-transfer caps or volume limits — impossible by construction once amounts are encrypted. Honest answer: that class of rule moves off-chain to the auditor key.
-3. **Confidential balances don't trade on an AMM.** Mode A remains the venue leg. The dual-mode architecture is the honest answer, not a workaround.
-4. **`ConfidentialTransfer` sits behind a feature gate that has been switched off before** (Jun 2025 – Jun 2026). Real platform risk; name it rather than hide it.
-5. **Decryption is client-side work.** Scanning balances requires the ElGamal secret; UX needs careful key handling.
+A frozen position is never seized. The balance is untouched and usable again as
+soon as the holder is re-attested and the account thawed.
 
----
+## Who can read what
 
-## 6. Competitive position
+| | Public | Holder | Issuer (auditor key) |
+|---|---|---|---|
+| Who holds the security | yes | yes | yes |
+| Who sent to whom | yes | yes | yes |
+| Each holder's attestation and jurisdiction | yes | yes | yes |
+| A holder's balance | no | own only | yes |
+| A transfer's amount | no | own only | yes |
 
-- **Arcium + Umbra** — encrypted MPC network + shielded wallet, mainnet alpha Feb 2026. Viewing keys, risk screening, geo-blocking. General private payments/swaps. Closest neighbour; not a securities standard.
-- **Helius Solana Rings** — programmable privacy infra, private asset+amount with public sender/recipient, optional compliance.
-- **Encrypt.xyz** — private transfer infrastructure.
-- **Cloak** (Brazil, Cohort 4) — ZKP privacy layer at Solana speed.
+**This is balance privacy, not anonymity.** The holder set is public by design:
+a transfer agent is required to know its holders, and each holder's attestation
+is an on-chain account.
 
-All horizontal privacy infrastructure. **None targets compliant tokenized equities.** The lane — a confidential, policy-gated equity register with an issuer-held viewing key — is open.
+The holder decrypts their own balance client-side, with keys derived from a
+wallet signature.
 
----
+The issuer sets the auditor key on the mint before handing the approval
+authority to the Policy PDA. After that handover nobody can replace the key,
+the issuer included. Balances are encrypted to their holders only, so the
+auditor reads positions the way a transfer agent would: deposits and
+withdrawals are public, every transfer carries its amount encrypted to the
+auditor key, and the register is the sum.
 
-## 7. Five-day plan (Oct 6 → 12)
+## Why not split a position across wallets?
 
-| Day | Deliverable |
-|---|---|
-| **1 — Oct 6** | `vellum` program: `init_confidential_policy`, `thaw_if_attested`, `refreeze_if_invalid`. Reuses `Registry`/`Attestation` unchanged. Unit + localnet tests. |
-| **2 — Oct 7** | TS: create the confidential mint (`DefaultAccountState=Frozen` + `ConfidentialTransferMint{auto_approve=false, auditor}`); configure account; deposit → apply → confidential transfer between two thawed accounts. Prove encrypted transfer end to end. |
-| **3 — Oct 8** | The demo. Side-by-side: public mint balance readable by anyone vs confidential mint showing ciphertext; unattested wallet cannot open an account; auditor key reveals the true number. |
-| **4 — Oct 9** | `auditor-report` script (regulatory export: decrypt the full holder register). README + architecture diagram. Visible commit velocity. |
-| **5 — Oct 10/11** | Pitch video ≤3 min (startup pitch, not a demo) + technical video 2–3 min (why we prioritised the freeze gate). Submission fields. **Oct 12 = buffer.** |
+A common suggestion is to hide a position by spreading it over many derived
+wallets. It does not work for a regulated security:
 
-**Risk to resolve on Day 2:** the ZK ElGamal Proof Program is a native program — confirm it's active on the local validator; fall back to devnet if not. Decide early, it gates days 2–4.
+- **Every holding wallet needs its own attestation**, which is a public account
+  issued by the same attestor. Listing a registry's attestations returns the
+  full holder set, so the split is published along with the wallets.
+- **The wallets are linkable anyway**, through who funded them, who pays their
+  fees, when they were created, and the moment they are consolidated to sell.
+- **Amounts stay public.** Each wallet's balance is still readable; only the
+  total takes a little arithmetic.
+- **Cost grows with the number of wallets**: rent, token accounts and
+  attestations.
 
-**Track:** Solana ($100k, 10 × $10k) + the general pool. With five days and a Solana codebase, the multi-track plan from `worlds-fair-2026.md` is off — one submission per team, and a chain switch now would be fatal. Stated plainly rather than hedged.
+Encrypting the balance addresses the actual problem; scattering it does not.
 
----
+## Trade-offs
 
-## 8. Sources
+1. **Coarser checks.** Eligibility is checked when an account is thawed, not on
+   each transfer. `refreeze_if_invalid` closes the gap, and anyone can call it.
+2. **No amount-based rules.** Per-transfer caps and volume limits cannot be
+   enforced on-chain once amounts are encrypted. Rules of that kind move
+   off-chain, to whoever holds the auditor key.
+3. **No AMM.** Confidential balances cannot be pooled or routed. Mode A remains
+   the trading leg.
+4. **Platform risk.** Confidential transfers depend on Solana's ZK ElGamal proof
+   program, which was disabled from June 2025 to June 2026 after a soundness bug
+   and has been live on mainnet since.
+5. **Client-side keys.** Reading a balance needs the holder's decryption keys,
+   and proofs are generated in the client. Today that means the Rust tooling;
+   there is no browser wallet flow yet.
+6. **The auditor key cannot be rotated** once the Policy PDA holds the approval
+   authority.
+7. **Not audited**, and so far run only on a local validator.
 
-- Token-2022 extension compatibility (`ConfidentialTransfer` × `TransferHook`/`TransferFeeConfig`/`PermanentDelegate` mutually exclusive; `DefaultAccountState` compatible with `ConfidentialTransferMint` at `auto_approve_new_accounts=false`) — solana.com/docs/tokens/extensions, Neodyme "Don't shoot yourself in the foot with extensions"
-- sRFC-37 Token ACL — `solana-foundation/SRFCs` discussion #2, `solana-foundation/token-acl`, solana.com/developers/guides/advanced/acl
-- ZK ElGamal Proof Program disable/re-enable timeline — Solana Changelog 16 Jul 2026; epoch 805 (19 Jun 2025) → epoch 982 (4 Jun 2026)
-- Confidential transfer docs incl. auditor key — solana.com/docs/tokens/extensions/confidential-transfer/*, solana.com/docs/finance/privacy
-- Institutional privacy–transparency dilemma — "SoK of RWA Tokenization" (arXiv 2604.06608), Chainlink "Privacy-Preserving Tokenization"
-- Competitors — Messari "Arcium: Bringing Privacy to Solana with Umbra"; The Block, 2 Feb 2026; Helius Privacy docs
+## Status
+
+Implemented and tested. `anchor test` covers the gate with 13 tests, and
+`scripts/confidential-e2e.sh` runs the whole flow against a real Token-2022
+confidential mint on a local validator: 34 asserted steps, ending with the
+explorer's view (balance 0), each holder's own decrypted balance, and the
+register rebuilt with the auditor key. The [README](README.md) has the commands
+and sample output; [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) has the version pins.
+
+Not built yet: a holder wallet UI and a devnet deployment.
+
+## Related work
+
+Several Solana projects provide general-purpose privacy: Arcium with Umbra
+(encrypted computation and a shielded wallet), Helius's privacy tooling, and
+other private-transfer layers. They are horizontal infrastructure for payments
+and swaps. Vellum is narrower: a share register with transfer restrictions,
+built on the token program's own confidential balances.
+
+## References
+
+- Token-2022 extension compatibility: [solana.com/docs/tokens/extensions](https://solana.com/docs/tokens/extensions);
+  Neodyme, "Don't shoot yourself in the foot with extensions"
+- sRFC-37 Token ACL: [solana-foundation/token-acl](https://github.com/solana-foundation/token-acl)
+- Confidential transfers and the auditor key:
+  [solana.com/docs/tokens/extensions/confidential-transfer](https://solana.com/docs/tokens/extensions/confidential-transfer)
+- ZK ElGamal proof program timeline: disabled at epoch 805 (19 June 2025),
+  re-enabled at epoch 982 (4 June 2026)
+- The privacy and transparency dilemma in tokenization: "SoK of RWA
+  Tokenization" (arXiv 2604.06608); Chainlink, "Privacy-Preserving Tokenization"
