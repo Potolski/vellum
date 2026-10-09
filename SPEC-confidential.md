@@ -155,8 +155,8 @@ Encrypting the balance addresses the actual problem; scattering it does not.
    program, which was disabled from June 2025 to June 2026 after a soundness bug
    and has been live on mainnet since.
 5. **Client-side keys.** Reading a balance needs the holder's decryption keys,
-   and proofs are generated in the client. Today that means the Rust tooling;
-   there is no browser wallet flow yet.
+   and proofs are generated in the client. A browser can read a balance today;
+   generating the proofs for a transfer still needs the Rust tooling.
 6. **The auditor key cannot be rotated** once the Policy PDA holds the approval
    authority.
 7. **Not audited**, and not on mainnet. The programs are deployed on devnet.
@@ -170,7 +170,8 @@ explorer's view (balance 0), each holder's own decrypted balance, and the
 register rebuilt with the auditor key. The [README](README.md) has the commands
 and sample output; [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) has the version pins.
 
-Not built yet: a holder wallet UI.
+A read-only holder view runs in the browser against the devnet deployment. Not
+built yet: sending a transfer from the browser.
 
 ## Related work
 

@@ -134,9 +134,16 @@ RPC_URL=https://api.devnet.solana.com FUNDER=~/.config/solana/id.json \
   scripts/confidential-e2e.sh
 ```
 
-## Landing page
+## Site and holder view
 
-`web/` is the marketing page (Next.js, static export): `cd web && yarn install && yarn dev`.
+`web/` is the site (Next.js, static export): `cd web && yarn install && yarn dev`.
+
+Its `/holder` page is the holder's side of the confidential mint above, in a
+browser: the public account next to the balance decrypted with the holder's own
+key. Three demo holders are built in (attested, attested with a pending credit,
+and never attested), and a connected wallet derives its key by signing a
+message. Decryption happens in the page; proofs, and so transfers, still need
+the Rust tooling.
 
 ## Status / roadmap
 
@@ -146,4 +153,5 @@ RPC_URL=https://api.devnet.solana.com FUNDER=~/.config/solana/id.json \
       run end to end against a real confidential mint, with client-side
       balance decryption and an auditor-key register
 - [x] M4 — devnet deployment, with the confidential flow run there
-- [ ] M5 — holder wallet UI
+- [x] M5 — holder view in the browser: read-only, with client-side decryption
+- [ ] Next — transfers from the browser, which need proof generation there
