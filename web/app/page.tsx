@@ -281,7 +281,7 @@ function Modes() {
             <span>Mode B follows sRFC-37 · Token ACL</span>
             {/* Keep in step with `anchor test`. */}
             <span className="stamp" style={{ color: "var(--pos)", borderColor: "var(--pos)" }}>
-              28 tests passing
+              34 tests passing
             </span>
           </div>
         </Reveal>
