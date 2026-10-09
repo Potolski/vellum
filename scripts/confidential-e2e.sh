@@ -17,7 +17,7 @@
 #   1. spl-token-cli >= 5.6.1, and a validator running the mainnet Token-2022
 #      (same two pins as confidential-baseline.sh)
 #   2. `anchor build` and `yarn install`; the program is deployed here if missing
-#   3. for the auditor key and the decrypted views at the end:
+#   3. the client-side decryption tool, which also derives the auditor key:
 #      cargo build --release --manifest-path tools/reveal/Cargo.toml
 #
 # Usage: scripts/confidential-e2e.sh [work_dir]     (default: ./.confidential-demo)
@@ -53,10 +53,10 @@ v()  { RPC_URL="$RPC" KEYPAIR="$ISS" node "$ROOT/scripts/vellum.js" "$@"; }
 pk() { grep -oE "(Creating (token|account)|Address:) *[A-Za-z0-9]{32,}" | grep -oE "[A-Za-z0-9]{32,}" | head -1; }
 as() { local who="$1"; shift; "$@" --owner "$WORK/$who.json" --fee-payer "$WORK/$who.json"; }
 
-# Client-side decryption (holder and auditor views). Optional: without it the
-# mint is created with no auditor and the run ends at the explorer's view.
+# Client-side decryption (holder and auditor views). Required: Vellum refuses a
+# confidential mint without an auditor key, and this derives it.
 REVEAL="$ROOT/tools/reveal/target/release/vellum-reveal"
-[ -x "$REVEAL" ] || REVEAL=""
+[ -x "$REVEAL" ] || { echo "error: build it first: cargo build --release --manifest-path tools/reveal/Cargo.toml"; exit 1; }
 audit_as() { "$REVEAL" audit "$WORK/$1.json" < "$WORK/history.json"; }
 
 PASS=0; FAIL=0
@@ -117,10 +117,11 @@ no "policy refused while issuer keeps freeze authority" PolicyNotFreezeAuthority
                                                  v init-confidential-policy "$MINT"
 # Last chance to set it: once the policy PDA holds the confidential authority
 # nobody can swap the auditor key, the issuer included.
-[ -n "$REVEAL" ] && \
 ok "set the issuer's auditor key on the mint"    t update-confidential-transfer-settings "$MINT" \
                                                    --auditor-pubkey "$("$REVEAL" auditor-key "$WORK/auditor.json")"
 ok "hand freeze authority to the policy PDA"     t authorize "$MINT" freeze "$POLICY"
+no "policy refused while the issuer could still swap the auditor key" PolicyNotConfidentialAuthority \
+                                                 v init-confidential-policy "$MINT"
 ok "hand confidential authority to the policy PDA" \
                                                  t authorize "$MINT" confidential-transfer-mint "$POLICY"
 ok "create confidential policy"                  v init-confidential-policy "$MINT"
@@ -185,32 +186,27 @@ done
 
 # The other half: each holder reads their own position back, client-side, with
 # keys derived from their wallet signature.
-if [ -n "$REVEAL" ]; then
-  echo
-  echo "what each holder sees:"
-  for pair in "alice:$AT" "bob:$BT"; do
-    who="${pair%%:*}"; acct="${pair#*:}"
-    t account-info --address "$acct" --output json 2>/dev/null \
-      | "$REVEAL" balance "$WORK/$who.json" 2>&1 | sed "s/^/  $(printf '%-6s' "$who") /"
-  done
+echo
+echo "what each holder sees:"
+for pair in "alice:$AT" "bob:$BT"; do
+  who="${pair%%:*}"; acct="${pair#*:}"
+  t account-info --address "$acct" --output json 2>/dev/null \
+    | "$REVEAL" balance "$WORK/$who.json" 2>&1 | sed "s/^/  $(printf '%-6s' "$who") /"
+done
 
-  # And the issuer reads all of them: the register, rebuilt from the mint's
-  # history with the auditor key.
-  echo
-  echo "what the auditor sees:"
-  v history "$MINT" > "$WORK/history.json"
-  audit_as auditor 2>&1 | tee "$WORK/register.txt" | sed "s/^/  /"
-  echo
-  ok "auditor's figure for alice matches her own (650.00)" \
-                                                   grep -q "$ALICE .*confidential 650.00" "$WORK/register.txt"
-  ok "auditor's figure for bob matches his own (450.00 + 100.00 pending)" \
-                                                   grep -q "$BOB .*confidential 550.00" "$WORK/register.txt"
-  no "a holder's key cannot audit the mint" "not the mint's auditor" \
-                                                   audit_as alice
-else
-  echo
-  echo "(build tools/reveal to decrypt these: cargo build --release --manifest-path tools/reveal/Cargo.toml)"
-fi
+# And the issuer reads all of them: the register, rebuilt from the mint's
+# history with the auditor key.
+echo
+echo "what the auditor sees:"
+v history "$MINT" > "$WORK/history.json"
+audit_as auditor 2>&1 | tee "$WORK/register.txt" | sed "s/^/  /"
+echo
+ok "auditor's figure for alice matches her own (650.00)" \
+                                                 grep -q "$ALICE .*confidential 650.00" "$WORK/register.txt"
+ok "auditor's figure for bob matches his own (450.00 + 100.00 pending)" \
+                                                 grep -q "$BOB .*confidential 550.00" "$WORK/register.txt"
+no "a holder's key cannot audit the mint" "not the mint's auditor" \
+                                                 audit_as alice
 
 echo
 echo "$PASS passed, $FAIL failed    (work dir: $WORK)"
