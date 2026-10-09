@@ -335,7 +335,8 @@ const MILESTONES = [
   { id: "M1", what: "Registry, hook, policy engine", done: true },
   { id: "M2", what: "AMM composability shim", done: true },
   { id: "M3", what: "Confidential mode, freeze gate, auditor key", done: true },
-  { id: "M4", what: "Holder wallet, devnet", done: false },
+  { id: "M4", what: "Devnet deployment", done: true },
+  { id: "M5", what: "Holder wallet", done: false },
 ];
 
 function Close() {
