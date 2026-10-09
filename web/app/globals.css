@@ -220,6 +220,31 @@ footer .wordmark{font-size:20px;margin-right:0}
 footer nav{display:flex;gap:20px;flex-wrap:wrap}
 footer a{color:var(--on-desk-muted);text-decoration:none}
 footer a:hover{color:var(--on-desk)}
+.try{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;text-decoration:none;justify-self:start}
+.try svg{width:15px;height:15px}
+/* holder view */
+.hv-sec{border-top:0;padding-top:clamp(32px,5vw,64px)}
+.hv-sec h1{font-weight:400;font-size:clamp(44px,6vw,84px);line-height:.96;letter-spacing:-.02em}
+.hv-sec h1 i{color:var(--gold)}
+.hv{display:grid;gap:22px}
+.hv-pick{display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px}
+.hv-pick .btn{padding:9px 14px;font-size:12px;cursor:pointer;background:none}
+.hv-pick .btn:disabled{opacity:.45;cursor:default}
+.hv-lookup{display:flex;align-items:center;gap:8px;margin-left:auto}
+.hv-lookup label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.hv-lookup input{width:min(46vw,300px);background:none;border:1px solid var(--rule-d);border-radius:4px;padding:9px 12px;color:var(--on-desk);font-family:var(--mono);font-size:12px}
+.hv-lookup input::placeholder{color:var(--on-desk-muted)}
+.hv-note{font-family:var(--mono);font-size:12px;letter-spacing:.02em;color:var(--on-desk-muted);min-height:1.5em;margin-bottom:18px}
+.hv .receipt a,.hv .hstmt a{color:inherit;text-decoration-color:var(--rule-p)}
+.hv .receipt .tot b,.hv .hstmt .tot b{font-size:clamp(40px,6vw,64px)}
+.sealed{position:relative;display:inline-block;color:transparent;background:var(--bar);padding:0 6px;user-select:none}
+.tot .sealed{font-size:.62em;vertical-align:.12em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.hv-act{display:grid;gap:10px;margin-top:18px;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink-muted);min-height:44px}
+.hv-unlock{background:var(--ink);color:var(--paper);border:0;cursor:pointer;justify-self:start}
+.hv-unlock:hover{background:var(--ink-gold)}
+.hv-unlock:disabled{opacity:.5;cursor:default}
+@media (max-width:900px){.hv-lookup{margin-left:0;width:100%}.hv-lookup input{flex:1;width:auto}}
 /* reveal on scroll */
 .rv{opacity:0;transform:translateY(24px) rotate(var(--rot,0deg));transition:opacity .8s,transform .9s cubic-bezier(.2,.8,.2,1)}
 .rv.in{opacity:1;transform:rotate(var(--rot,0deg))}
