@@ -145,7 +145,7 @@ through; an unattested trader's identical swap reverts in the hook.
 - **Vellum is infrastructure, not an issuer.** The tests and demos use mock
   equities. Issuing a real security needs a licensed issuer or transfer agent,
   who would be the user of this program.
-- **Not audited.** The programs run on a local validator and have not been
+- **Not audited.** The programs run on devnet and have not been
   reviewed by a third party.
 
 ## Status

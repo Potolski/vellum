@@ -54,7 +54,7 @@ anchor test
 
 The public ledger shows nothing; the holder reads their own position back with
 keys derived from their wallet signature; the issuer rebuilds the whole register
-with the mint's auditor key. One run, on localnet, of a real
+with the mint's auditor key. One run, on localnet or devnet, of a real
 Token-2022 confidential mint whose freeze authority *and* confidential-transfer
 authority are the Vellum policy PDA:
 
@@ -109,6 +109,31 @@ surface as a generic `InvalidInstructionData`) — written up in
 [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). `scripts/confidential-baseline.sh`
 isolates the crypto from the gate if you need to tell the two apart.
 
+## Devnet
+
+Both programs are deployed on devnet:
+
+| Program | Address |
+|---|---|
+| `vellum` | [`7jhdAgapZXFyLW2ARyYsq2Ji5n3bG3EZSieSjMt37mdj`](https://explorer.solana.com/address/7jhdAgapZXFyLW2ARyYsq2Ji5n3bG3EZSieSjMt37mdj?cluster=devnet) |
+| `vellum_amm` | [`A3qAMaYo4zHfZev9aEm6Gvx8Z6KTxsauRpk6jhd6nYyF`](https://explorer.solana.com/address/A3qAMaYo4zHfZev9aEm6Gvx8Z6KTxsauRpk6jhd6nYyF?cluster=devnet) |
+
+The confidential flow above has been run there end to end. The mint it left
+behind is
+[`GKV7ZsXVNLGcPrChz5E8W9Qgx5qBUNL7fckJv2jFnGFD`](https://explorer.solana.com/address/GKV7ZsXVNLGcPrChz5E8W9Qgx5qBUNL7fckJv2jFnGFD?cluster=devnet):
+its freeze authority and confidential transfer authority are the Vellum policy
+PDA, and its holders'
+[token accounts](https://explorer.solana.com/address/BJXCkPf3s2muaKnz9p9JNQkFpQnSp9Qk2YFRdppLoefL/tokens?cluster=devnet)
+show a balance of 0 over an encrypted position of 650.00.
+
+To run it yourself against the deployed program, with a funded devnet keypair
+(about 1.5 SOL, most of it rent):
+
+```bash
+RPC_URL=https://api.devnet.solana.com FUNDER=~/.config/solana/id.json \
+  scripts/confidential-e2e.sh
+```
+
 ## Landing page
 
 `web/` is the marketing page (Next.js, static export): `cd web && yarn install && yarn dev`.
@@ -118,6 +143,7 @@ isolates the crypto from the gate if you need to tell the two apart.
 - [x] M1 — core registry + hook + policy engine (11 tests)
 - [x] M2 — AMM composability shim (4 tests)
 - [x] M3 — confidential mode: freeze gate + account-level policy (19 tests),
-      run end to end against a real confidential mint on localnet, with
-      client-side balance decryption and an auditor-key register
-- [ ] M4 — holder wallet UI, devnet deploy
+      run end to end against a real confidential mint, with client-side
+      balance decryption and an auditor-key register
+- [x] M4 — devnet deployment, with the confidential flow run there
+- [ ] M5 — holder wallet UI

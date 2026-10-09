@@ -159,18 +159,18 @@ Encrypting the balance addresses the actual problem; scattering it does not.
    there is no browser wallet flow yet.
 6. **The auditor key cannot be rotated** once the Policy PDA holds the approval
    authority.
-7. **Not audited**, and so far run only on a local validator.
+7. **Not audited**, and not on mainnet. The programs are deployed on devnet.
 
 ## Status
 
 Implemented and tested. `anchor test` covers the gate with 19 tests, and
 `scripts/confidential-e2e.sh` runs the whole flow against a real Token-2022
-confidential mint on a local validator: 35 asserted steps, ending with the
+confidential mint, on a local validator or on devnet: 35 asserted steps, ending with the
 explorer's view (balance 0), each holder's own decrypted balance, and the
 register rebuilt with the auditor key. The [README](README.md) has the commands
 and sample output; [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) has the version pins.
 
-Not built yet: a holder wallet UI and a devnet deployment.
+Not built yet: a holder wallet UI.
 
 ## Related work
 
