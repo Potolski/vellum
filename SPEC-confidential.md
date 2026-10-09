@@ -77,7 +77,7 @@ This is stricter than Mode A for any single transfer.
 
 | Instruction | Signer | Effect |
 |---|---|---|
-| `init_confidential_policy(flags, blocked_jurisdictions)` | issuer | creates the policy. Fails unless the Policy PDA already holds the mint's freeze authority, so a policy that cannot enforce anything cannot exist |
+| `init_confidential_policy(flags, blocked_jurisdictions)` | issuer | creates the policy. Fails unless the Policy PDA already holds the mint's freeze authority and approval authority, approval is manual, and an auditor key is set, so a policy that cannot enforce anything, or that the issuer cannot oversee, cannot exist |
 | `thaw_if_attested` | anyone | thaws an account whose owner is eligible |
 | `approve_confidential_account` | anyone | approves an eligible owner's account to hold an encrypted balance |
 | `refreeze_if_invalid` | anyone | freezes an account whose owner is no longer eligible. Fails if the owner is still eligible |
@@ -118,8 +118,9 @@ The holder decrypts their own balance client-side, with keys derived from a
 wallet signature.
 
 The issuer sets the auditor key on the mint before handing the approval
-authority to the Policy PDA. After that handover nobody can replace the key,
-the issuer included. Balances are encrypted to their holders only, so the
+authority to the Policy PDA, and the program will not create a policy for a
+mint without one. After that handover nobody can replace the key, the issuer
+included. Balances are encrypted to their holders only, so the
 auditor reads positions the way a transfer agent would: deposits and
 withdrawals are public, every transfer carries its amount encrypted to the
 auditor key, and the register is the sum.
@@ -162,9 +163,9 @@ Encrypting the balance addresses the actual problem; scattering it does not.
 
 ## Status
 
-Implemented and tested. `anchor test` covers the gate with 13 tests, and
+Implemented and tested. `anchor test` covers the gate with 19 tests, and
 `scripts/confidential-e2e.sh` runs the whole flow against a real Token-2022
-confidential mint on a local validator: 34 asserted steps, ending with the
+confidential mint on a local validator: 35 asserted steps, ending with the
 explorer's view (balance 0), each holder's own decrypted balance, and the
 register rebuilt with the auditor key. The [README](README.md) has the commands
 and sample output; [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) has the version pins.

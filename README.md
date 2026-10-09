@@ -38,7 +38,7 @@ The hook's ExtraAccountMetaList uses account-data seeds, so **standard SPL helpe
 anchor test
 ```
 
-28 tests. Mode A: KYC'd↔KYC'd transfers, unattested rejection, jurisdiction blocklist, VENUE exemption (DeFi composability), revocation + re-attestation, issuer pause/unpause, direct-invocation protection, attestor auth — and the AMM flow where a KYC'd trader's swap succeeds while an unattested trader's identical swap reverts **inside the token program**. Mode B: accounts are born frozen; only attested holders can be thawed or approved for an encrypted balance; expiry, revocation, a blocked jurisdiction or an issuer pause each close the gate; a compliant holder cannot be re-frozen, including by substituting someone else's attestation account.
+34 tests. Mode A: KYC'd↔KYC'd transfers, unattested rejection, jurisdiction blocklist, VENUE exemption (DeFi composability), revocation + re-attestation, issuer pause/unpause, direct-invocation protection, attestor auth — and the AMM flow where a KYC'd trader's swap succeeds while an unattested trader's identical swap reverts **inside the token program**. Mode B: a policy is refused unless the policy PDA holds both of the mint's authorities and an auditor key is set; accounts are born frozen; only attested holders can be thawed or approved for an encrypted balance; expiry, revocation, a blocked jurisdiction or an issuer pause each close the gate; a compliant holder cannot be re-frozen, including by substituting someone else's attestation account.
 
 ## Transfer-hook mode, step by step
 
@@ -57,7 +57,7 @@ Token-2022 confidential mint whose freeze authority *and* confidential-transfer
 authority are the Vellum policy PDA:
 
 ```bash
-scripts/confidential-e2e.sh      # 34 asserted steps, including the ones that must fail
+scripts/confidential-e2e.sh      # 35 asserted steps, including the ones that must fail
 ```
 
 ```
@@ -89,7 +89,8 @@ account, and revoking Bob freezes his position (never seizes it) until he is
 re-attested.
 
 The auditor key is set on the mint before the issuer hands the confidential
-authority to the policy PDA; after that nobody can swap it. Balances are
+authority to the policy PDA, and the program refuses the policy otherwise;
+after that nobody can swap it. Balances are
 encrypted to their holders, not to the auditor, so the audit reads them the way
 a transfer agent would: deposits and withdrawals are public, each transfer
 carries its amount encrypted to the auditor key, and the register is the sum.
@@ -114,7 +115,7 @@ isolates the crypto from the gate if you need to tell the two apart.
 
 - [x] M1 — core registry + hook + policy engine (11 tests)
 - [x] M2 — AMM composability shim (4 tests)
-- [x] M3 — confidential mode: freeze gate + account-level policy (13 tests),
+- [x] M3 — confidential mode: freeze gate + account-level policy (19 tests),
       run end to end against a real confidential mint on localnet, with
       client-side balance decryption and an auditor-key register
 - [ ] M4 — holder wallet UI, devnet deploy

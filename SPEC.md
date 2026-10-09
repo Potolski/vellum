@@ -150,6 +150,6 @@ through; an unattested trader's identical swap reverts in the hook.
 
 ## Status
 
-Both programs are implemented and tested: `anchor test` runs 28 tests, 15 of
+Both programs are implemented and tested: `anchor test` runs 34 tests, 15 of
 them for this mode (registry, policy, hook and the AMM flow). The
 [README](README.md) has the commands.
