@@ -1,5 +1,7 @@
 # Vellum
 
+[![CI](https://github.com/Potolski/vellum/actions/workflows/ci.yml/badge.svg)](https://github.com/Potolski/vellum/actions/workflows/ci.yml)
+
 **The confidential share register.** Compliant *and* private tokenized equities on Solana — an attestation registry that enforces securities policy (KYC, jurisdiction, accreditation, pause) while holders' balances stay encrypted on-chain and only the issuer holds the key to read them.
 
 Built for the Colosseum Crypto World's Fair hackathon (Sept–Oct 2026). See [SPEC.md](SPEC.md) for the compliance layer and [SPEC-confidential.md](SPEC-confidential.md) for the confidential mode.
