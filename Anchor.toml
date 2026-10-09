@@ -9,6 +9,10 @@ skip-lint = false
 vellum = "7jhdAgapZXFyLW2ARyYsq2Ji5n3bG3EZSieSjMt37mdj"
 vellum_amm = "A3qAMaYo4zHfZev9aEm6Gvx8Z6KTxsauRpk6jhd6nYyF"
 
+[programs.devnet]
+vellum = "7jhdAgapZXFyLW2ARyYsq2Ji5n3bG3EZSieSjMt37mdj"
+vellum_amm = "A3qAMaYo4zHfZev9aEm6Gvx8Z6KTxsauRpk6jhd6nYyF"
+
 [registry]
 url = "https://api.apr.dev"
 
