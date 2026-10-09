@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export const LINKS = {
   repo: "https://github.com/Potolski/vellum",
   spec: "https://github.com/Potolski/vellum/blob/main/SPEC.md",
@@ -15,10 +17,10 @@ export function Mark() {
 
 export function Wordmark({ label }: { label: string }) {
   return (
-    <a className="wordmark" href="#top" aria-label={label}>
+    <Link className="wordmark" href="/" aria-label={label}>
       <Mark />
       <span>Vellum</span>
-    </a>
+    </Link>
   );
 }
 

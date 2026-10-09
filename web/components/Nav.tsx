@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Github, LINKS, Wordmark } from "./brand";
 
@@ -16,12 +17,15 @@ export function Nav() {
   return (
     <header className={stuck ? "nav stuck" : "nav"} id="top">
       <Wordmark label="Vellum, home" />
-      <a className="l" href="#how">
+      <Link className="l" href="/#how">
         How it works
-      </a>
-      <a className="l" href="#hides">
+      </Link>
+      <Link className="l" href="/#hides">
         What it hides
-      </a>
+      </Link>
+      <Link className="l" href="/holder">
+        Holder view
+      </Link>
       <a className="l" href={LINKS.specConfidential}>
         Spec
       </a>

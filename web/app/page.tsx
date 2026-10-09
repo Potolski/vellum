@@ -1,4 +1,5 @@
-import { Ctas, KeyRound, LINKS, Wordmark } from "@/components/brand";
+import Link from "next/link";
+import { ArrowRight, Ctas, KeyRound, LINKS, Wordmark } from "@/components/brand";
 import { FreezeGate } from "@/components/FreezeGate";
 import { Hero } from "@/components/Hero";
 import { Redacted, Reveal } from "@/components/motion";
@@ -181,6 +182,10 @@ function Hides() {
                 <b>650</b>
               </div>
             </div>
+            <Link className="try" href="/holder">
+              Read a live one on devnet
+              <ArrowRight />
+            </Link>
           </Reveal>
         </div>
 
@@ -336,7 +341,7 @@ const MILESTONES = [
   { id: "M2", what: "AMM composability shim", done: true },
   { id: "M3", what: "Confidential mode, freeze gate, auditor key", done: true },
   { id: "M4", what: "Devnet deployment", done: true },
-  { id: "M5", what: "Holder wallet", done: false },
+  { id: "M5", what: "Holder view, in the browser", done: true },
 ];
 
 function Close() {
