@@ -22,6 +22,11 @@
 #
 # Usage: scripts/confidential-e2e.sh [work_dir]     (default: ./.confidential-demo)
 #        REDEPLOY=1 to push a rebuilt program before running
+#
+# On a public cluster there is no faucet to lean on. Point RPC_URL at it and
+# FUNDER at a funded keypair, which pays the actors (about 1.5 SOL, most of it
+# rent) and is expected to be the program's upgrade authority:
+#        RPC_URL=https://api.devnet.solana.com FUNDER=~/.config/solana/id.json scripts/confidential-e2e.sh
 
 set -uo pipefail
 
@@ -41,6 +46,8 @@ ISS="$WORK/issuer.json"
 
 # The deployer persists across runs (it is the program's upgrade authority);
 # the actors are regenerated so each run starts from a clean registry.
+FUNDER="${FUNDER:-}"
+[ -n "$FUNDER" ] && DEPLOYER="$FUNDER"
 [ -f "$DEPLOYER" ] || solana-keygen new -o "$DEPLOYER" --no-bip39-passphrase -s >/dev/null 2>&1
 for k in issuer auditor alice bob carol; do
   solana-keygen new -o "$WORK/$k.json" --no-bip39-passphrase -s --force >/dev/null 2>&1
@@ -81,10 +88,17 @@ LEN="$(s program show "$TOKEN_2022" 2>/dev/null | grep -oE "Data Length: [0-9]+"
   echo "warning: looks like the bundled Token-2022; clone mainnet's (docs/TOOLCHAIN.md) or Deposit will fail."
 [ -f "$ROOT/target/idl/vellum.json" ] || { echo "error: run \`anchor build\` first"; exit 1; }
 
-s airdrop 100 "$(solana-keygen pubkey "$DEPLOYER")" >/dev/null 2>&1
-s airdrop 100 >/dev/null 2>&1
+if [ -n "$FUNDER" ]; then
+  s transfer "$(solana-keygen pubkey "$ISS")" 1.5 --from "$FUNDER" --fee-payer "$FUNDER" \
+    --allow-unfunded-recipient >/dev/null 2>&1 || { echo "error: could not fund the issuer from $FUNDER"; exit 1; }
+  HOLDER_SOL=0.2
+else
+  s airdrop 100 "$(solana-keygen pubkey "$DEPLOYER")" >/dev/null 2>&1
+  s airdrop 100 >/dev/null 2>&1
+  HOLDER_SOL=5
+fi
 for k in alice bob carol; do
-  s transfer "$(solana-keygen pubkey "$WORK/$k.json")" 5 --allow-unfunded-recipient >/dev/null 2>&1
+  s transfer "$(solana-keygen pubkey "$WORK/$k.json")" "$HOLDER_SOL" --allow-unfunded-recipient >/dev/null 2>&1
 done
 ALICE="$(solana-keygen pubkey "$WORK/alice.json")"
 BOB="$(solana-keygen pubkey "$WORK/bob.json")"
